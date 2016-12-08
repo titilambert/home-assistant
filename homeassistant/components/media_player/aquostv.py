@@ -17,7 +17,6 @@ from homeassistant.const import (
     CONF_HOST, CONF_NAME, STATE_OFF, STATE_ON, STATE_UNKNOWN,
     CONF_PORT, CONF_USERNAME, CONF_PASSWORD)
 
-
 import homeassistant.helpers.config_validation as cv
 
 REQUIREMENTS = ['sharp-aquos-rc==0.2']
@@ -31,7 +30,7 @@ DEFAULT_PASSWORD = 'password'
 
 SUPPORT_SHARPTV = SUPPORT_VOLUME_STEP | \
     SUPPORT_VOLUME_SET | SUPPORT_VOLUME_MUTE | \
-    SUPPORT_TURN_OFF | SUPPORT_TURN_ON
+    SUPPORT_TURN_OFF
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_HOST): cv.string,
@@ -39,6 +38,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
     vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): cv.string,
     vol.Optional(CONF_PASSWORD, default=DEFAULT_PASSWORD): cv.string,
+    vol.Optional('power_on_enabled', default=False): cv.boolean,
 })
 
 
@@ -51,6 +51,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     port = config.get(CONF_PORT)
     username = config.get(CONF_USERNAME)
     password = config.get(CONF_PASSWORD)
+    power_on_enabled = config.get('power_on_enabled')
 
     if discovery_info:
         _LOGGER.debug('%s', discovery_info)
@@ -63,7 +64,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
                                    port,
                                    username,
                                    password)
-        add_devices([SharpAquosTVDevice(name, remote)])
+        add_devices([SharpAquosTVDevice(name, remote, power_on_enabled)])
         return True
 
     host = config.get(CONF_HOST)
@@ -72,7 +73,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
                                username,
                                password)
 
-    add_devices([SharpAquosTVDevice(name, remote)])
+    add_devices([SharpAquosTVDevice(name, remote, power_on_enabled)])
     return True
 
 
@@ -81,35 +82,52 @@ class SharpAquosTVDevice(MediaPlayerDevice):
     """Representation of a Aquos TV."""
 
     # pylint: disable=too-many-public-methods
-    def __init__(self, name, remote):
+    def __init__(self, name, remote, power_on_enabled=False):
         """Initialize the aquos device."""
+        global SUPPORT_SHARPTV
+        self._power_on_enabled = power_on_enabled
+        if self._power_on_enabled:
+            SUPPORT_SHARPTV = SUPPORT_SHARPTV | SUPPORT_TURN_ON
         # Save a reference to the imported class
         self._name = name
         # Assume that the TV is not muted
         self._muted = False
-        # Assume that the TV is in Play mode
-        self._playing = True
         self._state = STATE_UNKNOWN
         self._remote = remote
         self._volume = 0
 
     def update(self):
         """Retrieve the latest data."""
-        try:
-            if self._remote.power() == 1:
-                self._state = STATE_ON
-            else:
-                self._state = STATE_OFF
-
-            # Set TV to be able to remotely power on
-            # self._remote.power_on_command_settings(2)
-            if self._remote.mute() == 2:
-                self._muted = False
-            else:
-                self._muted = True
-            self._volume = self._remote.volume() / 60
-        except OSError:
-            self._state = STATE_OFF
+        # According to the documentation:
+        # http://files.sharpusa.com/Downloads/ForHome/
+        # HomeEntertainment/LCDTVs/Manuals/tel_man_LC40_46_52_60LE830U.pdf
+        # Page 58 - Communication conditions for IP
+        # The connection could be lost (but not only after 3 minutes),
+        # so we need to the remote commands to be sure about states
+        retry = 3
+        while retry > 0:
+            try:
+                if self._remote.power() == 1:
+                    self._state = STATE_ON
+                else:
+                    self._state = STATE_OFF
+                # Set TV to be able to remotely power on
+                if self._power_on_enabled:
+                    self._remote.power_on_command_settings(2)
+                else:
+                    self._remote.power_on_command_settings(0)
+                # Get mute state
+                if self._remote.mute() == 2:
+                    self._muted = False
+                else:
+                    self._muted = True
+                # Get volume
+                self._volume = self._remote.volume() / 60
+                break
+            except OSError:
+                retry -= 1
+                if retry == 0:
+                    self._state = STATE_OFF
 
     @property
     def name(self):
@@ -158,4 +176,14 @@ class SharpAquosTVDevice(MediaPlayerDevice):
 
     def turn_on(self):
         """Turn the media player on."""
-        self._remote.power(1)
+        # The connection could be lost (but not only after 3 minutes),
+        # so we need to retry the remote command to be sure about states
+        retry = 3
+        while retry > 0:
+            try:
+                self._remote.power(1)
+                break
+            except OSError as exp:
+                retry -= 1
+                if retry == 0:
+                    raise exp
