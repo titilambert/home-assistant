@@ -7,7 +7,7 @@ For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/sensor.ebox/
 """
 import logging
-from datetime import timedelta
+import datetime
 
 import requests
 import voluptuous as vol
@@ -20,7 +20,7 @@ from homeassistant.const import (
 from homeassistant.helpers.entity import Entity
 
 # pylint: disable=import-error
-REQUIREMENTS = []  # ['pyebox==0.1.0'] - disabled because it breaks pip10
+REQUIREMENTS = ['pymycity==0.2.3']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ PERCENT = '%'  # type: str
 DEFAULT_NAME = 'PyMyCity'
 
 REQUESTS_TIMEOUT = 15
-SCAN_INTERVAL = timedelta(minutes=5)
+SCAN_INTERVAL = datetime.timedelta(minutes=5)
 
 
 
@@ -70,7 +70,8 @@ class PyMyCitySensor(Entity):
     def __init__(self, name, city_name, command, params, unit, attributes_name, httpsession):
         """Initialize the sensor."""
         self._state = None
-        self._data = None
+        self._next_data = None
+        self._all_data = None
         # try to create a good name
         if name is None:
             tmp_text = []
@@ -97,7 +98,7 @@ class PyMyCitySensor(Entity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        return self._state
+        return self._next_data.start
 
     @property
     def unit_of_measurement(self):
@@ -107,27 +108,42 @@ class PyMyCitySensor(Entity):
     @property
     def state_attributes(self):
         attrs = {}
-        if self._data is None:
+        if self._next_data is None:
             return attrs
-        for index, value in enumerate(self._data):
-            if self.attributes_name:
-                key = "{}_{}".format(self.attributes_name, index + 1)
-            else:
-                key = "{}_{}".format(self._name, index + 1)
-            # Improve serialization
+        for data_name in ('title', 'start', 'end', 'location', 'url', 'all_day', 'description'):
+            value = getattr(self._next_data, data_name, None)
+            if value is not None:
+                # Improve data to str
+                attrs[data_name] = str(value)
+        # timestamp
+        if isinstance(self._next_data.start, datetime.date):
+            # If start date is a date
+            tmpdate = datetime.datetime.combine(self._next_data.start, datetime.time(0))
+            attrs["start_timestamp"] = tmpdate.timestamp()
+        else:
+            # If start date is a datetime
+            attrs["start_timestamp"] = self._next_data.start.timestamp()
+        if isinstance(self._next_data.end, datetime.date):
+            # If end date is a date
+            tmpdate = datetime.datetime.combine(self._next_data.end, datetime.time(0))
+            attrs["end_timestamp"] = tmpdate.timestamp()
+        elif self._next_data.end:
+            # If end date is a datetime
+            attrs["end_timestamp"] = self._next_data.end.timestamp()
+        # metadata
+        for key, value in self._next_data.metadata.items():
+            # Improve data to str
             attrs[key] = str(value)
         return attrs
 
     async def update(self):
         """Get the latest data from PyMyCity and update the state."""
-        #if self.type in self.ebox_data.data:
-        #    self._state = round(self.ebox_data.data[self.type], 2)
         try:
             results = await getattr(self.city, self.command)(**self.params)
         except Exception as exp:
             _LOGGER.error("Error on receive last PyMyCity data: %s", exp)
             return
-        self._state = results[0]
+        self._next_data = results[0]
         # We want attributes if we have only one result
         if len(results) > 1:
-            self._data = results[1:]
+            self._all_data = results
