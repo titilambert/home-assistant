@@ -221,12 +221,8 @@ class CalendarEventDevice(Entity):
 
 
 # pylint: disable=too-many-instance-attributes
-class AsyncCalendarEventDevice(Entity):
+class AsyncCalendarEventDevice(CalendarEventDevice):
     """A calendar event device."""
-
-    # Classes overloading this must set data to an object
-    # with an update() method
-    data = None
 
     # pylint: disable=too-many-arguments
     def __init__(self, hass, data):
@@ -246,72 +242,6 @@ class AsyncCalendarEventDevice(Entity):
             'location': '',
             'description': '',
             'url': '',
-        }
-
-        self.update()
-
-    def offset_reached(self):
-        """Have we reached the offset time specified in the event title."""
-        if self._cal_data['start'] is None or \
-           self._cal_data['offset_time'] == dt.dt.timedelta():
-            return False
-
-        return self._cal_data['start'] + self._cal_data['offset_time'] <= \
-            dt.now(self._cal_data['start'].tzinfo)
-
-    @property
-    def name(self):
-        """Return the name of the entity."""
-        return self._name
-
-    @property
-    def device_state_attributes(self):
-        """Return the device state attributes."""
-        start = self._cal_data.get('start', None)
-        end = self._cal_data.get('end', None)
-        start = start.strftime(DATE_STR_FORMAT) if start is not None else None
-        end = end.strftime(DATE_STR_FORMAT) if end is not None else None
-
-        return {
-            'message': self._cal_data.get('message', ''),
-            'all_day': self._cal_data.get('all_day', False),
-            'offset_reached': self.offset_reached(),
-            'start_time': start,
-            'end_time': end,
-            'location': self._cal_data.get('location', None),
-            'description': self._cal_data.get('description', None),
-            'url': self._cal_data.get('url', None),
-        }
-
-    @property
-    def state(self):
-        """Return the state of the calendar event."""
-        start = self._cal_data.get('start', None)
-        end = self._cal_data.get('end', None)
-        if start is None or end is None:
-            return STATE_OFF
-
-        now = dt.now()
-
-        if start <= now and end > now:
-            return STATE_ON
-
-        if now >= end:
-            self.cleanup()
-
-        return STATE_OFF
-
-    def cleanup(self):
-        """Cleanup any start/end listeners that were setup."""
-        self._cal_data = {
-            'all_day': False,
-            'offset_time': 0,
-            'message': '',
-            'start': None,
-            'end': None,
-            'location': None,
-            'description': None,
-            'url': None,
         }
 
     async def async_update(self):
