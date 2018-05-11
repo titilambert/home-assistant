@@ -11,6 +11,7 @@ DATE_STR_FORMAT = "%Y-%m-%d"
 UTC = DEFAULT_TIME_ZONE = pytz.utc  # type: dt.tzinfo
 
 
+DURATION_RE = re.compile(r"([\d\.]+)([smhd])")
 # Copyright (c) Django Software Foundation and individual contributors.
 # All rights reserved.
 # https://github.com/django/django/blob/master/LICENSE
@@ -212,3 +213,26 @@ def get_age(date: dt.datetime) -> str:
         return formatn(minute, 'minute')
 
     return formatn(second, 'second') if second > 0 else "0 seconds"
+
+
+def parse_duration(duration: str) -> dt.datetime:
+    """Parse string and return timedelta.
+
+    Example: 1d1h1m1s => datetime.timedelta(1, 3661)
+    """
+    results = DURATION_RE.findall(duration)
+    if not results:
+        return None
+    days = 0
+    seconds = 0
+    for time_val, unit in results:
+        num = float(time_val)
+        if unit.endswith('s'):
+            seconds += num
+        elif unit.endswith('m'):
+            seconds += num * 60
+        elif unit.endswith('h'):
+            seconds += num * 60 * 60
+        elif unit.endswith('d'):
+            days += num
+    return dt.timedelta(days, seconds)
