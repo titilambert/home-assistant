@@ -15,7 +15,7 @@ from homeassistant.const import CONF_NAME
 import homeassistant.helpers.config_validation as cv
 from homeassistant.util import Throttle, dt
 
-REQUIREMENTS = ['pymycity==0.2.3']
+REQUIREMENTS = ['pymycity==0.2.6']
 
 _LOGGER = logging.getLogger(__name__)
 
