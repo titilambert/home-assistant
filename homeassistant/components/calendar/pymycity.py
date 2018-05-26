@@ -10,12 +10,15 @@ import logging
 import voluptuous as vol
 
 from homeassistant.components.calendar import (
-    PLATFORM_SCHEMA, AsyncCalendarEventDevice)
+    PLATFORM_SCHEMA, AsyncCalendarEventDevice, EventData, DOMAIN)
 from homeassistant.const import CONF_NAME
 import homeassistant.helpers.config_validation as cv
 from homeassistant.util import Throttle, dt
 
 REQUIREMENTS = ['pymycity==0.2.6']
+
+
+SUBDOMAIN = 'pymycity'
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,9 +34,11 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_NAME): cv.string,
     vol.Required("city"): cv.string,
     vol.Required("command"): cv.string,
+    vol.Optional("color"): cv.string,
     vol.Optional("params"): vol.All(),
     vol.Optional("reminder"): cv.string,
 })
+PERSISTENCE = '.pymycity.calendar.json'
 
 
 async def async_setup_platform(hass, config, async_add_devices, disc_info=None):
@@ -43,9 +48,13 @@ async def async_setup_platform(hass, config, async_add_devices, disc_info=None):
         CONF_DEVICE_ID: config.get(CONF_NAME),
         'city': config.get("city"),
         'command': config.get("command"),
+        'color': config.get("color"),
         'params': config.get("params") if config.get("params") else {},
         'reminder': config.get("reminder"),
     }
+    persistence_file = ".{}{}".format(config.get("city"), PERSISTENCE)
+    hass.data[DOMAIN][config.get(CONF_NAME)] = EventData(hass, persistence_file)
+
     from pymycity.cities import get_city_module
     httpsession = hass.helpers.aiohttp_client.async_get_clientsession()
     calendar = get_city_module(config.get("city"), None, httpsession)
@@ -70,6 +79,8 @@ class PyMyCityEventDevice(AsyncCalendarEventDevice):
                                  device_data['city'],
                                  device_data['command'],
                                  device_data['params'],
+                                 device_data['color'],
+                                 hass,
                                  httpsession)
         self.reminder = device_data['reminder']
         super().__init__(hass, device_data)
@@ -130,17 +141,16 @@ class PyMyCityEventDevice(AsyncCalendarEventDevice):
         self._cal_data['all_day'] = 'date' in self.data.event['start']
 
 
-
-
-
 class PyMyCityData(object):
     """Implementation of a PyMyCity sensor."""
 
-    def __init__(self, name, city_name, command, params, httpsession):
+    def __init__(self, name, city_name, command, params, color, hass, httpsession):
         """Initialize the sensor."""
+        self.hass = hass
         self._state = None
         self._all_data = None
         self.event = None
+        self.color = color
         # try to create a good name
         if name is None:
             tmp_text = []
@@ -165,7 +175,7 @@ class PyMyCityData(object):
         try:
             results = await getattr(self.city, self.command)(**self.params)
         # Improve this
-        except Exception as exp:
+        except Exception as exp:  # pylint: disable=W0703
             _LOGGER.error("Error on receive last PyMyCity data: %s", exp)
             return
         # If no matching event could be found
@@ -176,11 +186,22 @@ class PyMyCityData(object):
             self.event = None
             return True
 
+        for event in results:
+            self.hass.data[DOMAIN][self._name].async_add(
+                title=event.title,
+                start=self.get_hass_date(event.start),
+                end=self.get_hass_date(self.get_end_date(event)),
+                location=event.location,
+                color=self.color,
+                description=event.description,
+                url=event.url,)
+
         event = results[0]
 
         # Populate the entity attributes with the event values
         self.event = {
-            "summary": event.title,
+            #"summary": event.title,
+            "title": event.title,
             "start": self.get_hass_date(event.start),
             "end": self.get_hass_date(self.get_end_date(event)),
             "location": event.location,
