@@ -230,8 +230,10 @@ class AsyncCalendarEventDevice(CalendarEventDevice):
         self._name = data.get(CONF_NAME)
         self.dev_id = data.get(CONF_DEVICE_ID)
         self._offset = data.get(CONF_OFFSET, DEFAULT_CONF_OFFSET)
+        self._color = data.get(CONF_COLOR)
         self.entity_id = async_generate_entity_id(
             ENTITY_ID_FORMAT, self.dev_id, hass=hass)
+        self._event_list = []
 
         self._cal_data = {
             'all_day': False,
@@ -244,8 +246,24 @@ class AsyncCalendarEventDevice(CalendarEventDevice):
             'url': '',
         }
 
+        class CalendarEventView(http.HomeAssistantView):
+            """View to retrieve calendar content."""
+
+            url = '/api/calendar/' + self.entity_id.split(".")[-1]
+            name = "api:calendar"
+            device = self
+
+            async def get(self, request):
+                """Return calendar events."""
+                return self.json(self.device.event_list)
+
+        hass.http.register_view(CalendarEventView)
+
+
     async def async_update(self):
         """Search for the next event."""
+        self._event_list = self.data.event_list
+
         ret = await self.data.async_update()
         if not self.data or not ret:
             # update cached, don't do anything

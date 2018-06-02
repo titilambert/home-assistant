@@ -10,7 +10,7 @@ import logging
 import voluptuous as vol
 
 from homeassistant.components.calendar import (
-    PLATFORM_SCHEMA, AsyncCalendarEventDevice, EventData, DOMAIN)
+    PLATFORM_SCHEMA, AsyncCalendarEventDevice)
 from homeassistant.const import CONF_NAME
 import homeassistant.helpers.config_validation as cv
 from homeassistant.util import Throttle, dt
@@ -27,6 +27,7 @@ CONF_CALENDARS = 'calendars'
 CONF_CUSTOM_CALENDARS = 'custom_calendars'
 CONF_CALENDAR = 'calendar'
 CONF_SEARCH = 'search'
+CONF_COLOR = 'color'
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(minutes=15)
 
@@ -38,7 +39,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional("params"): vol.All(),
     vol.Optional("reminder"): cv.string,
 })
-PERSISTENCE = '.pymycity.calendar.json'
 
 
 async def async_setup_platform(hass, config, async_add_devices, disc_info=None):
@@ -48,13 +48,10 @@ async def async_setup_platform(hass, config, async_add_devices, disc_info=None):
         CONF_DEVICE_ID: config.get(CONF_NAME),
         'city': config.get("city"),
         'command': config.get("command"),
-        'color': config.get("color"),
+        CONF_COLOR: config.get(CONF_COLOR),
         'params': config.get("params") if config.get("params") else {},
         'reminder': config.get("reminder"),
     }
-    persistence_file = ".{}{}".format(config.get("city"), PERSISTENCE)
-    hass.data[DOMAIN][config.get(CONF_NAME)] = EventData(hass, persistence_file)
-
     from pymycity.cities import get_city_module
     httpsession = hass.helpers.aiohttp_client.async_get_clientsession()
     calendar = get_city_module(config.get("city"), None, httpsession)
@@ -89,56 +86,11 @@ class PyMyCityEventDevice(AsyncCalendarEventDevice):
     def device_state_attributes(self):
         """Return the device state attributes."""
         if self.data.event is None:
-            # No tasks, we don't REALLY need to show anything.
-            return {}
+             # No tasks, we show only calendar color
+            return {CONF_COLOR: self._color}
 
         attributes = super().device_state_attributes
         return attributes
-
-    async def async_update(self):
-        """Search for the next event."""
-        ret = await self.data.async_update()
-        if not self.data or not ret:
-            # update cached, don't do anything
-            return
-
-        if not self.data.event:
-            # we have no event to work on, make sure we're clean
-            self.cleanup()
-            return
-
-        def _get_date(date):
-            """Get the dateTime from date or dateTime as a local."""
-            if 'date' in date:
-                return dt.start_of_local_day(dt.dt.datetime.combine(
-                    dt.parse_date(date['date']), dt.dt.time.min))
-            return dt.as_local(dt.parse_datetime(date['dateTime']))
-
-        start = _get_date(self.data.event['start'])
-        end = _get_date(self.data.event['end'])
-
-        summary = self.data.event.get('summary', '')
-
-        # Get offset_time
-        offset_time = dt.dt.timedelta()
-        if self.reminder:
-            offset_time = dt.parse_duration(self.reminder)
-            if offset_time is None:
-                _LOGGER.error("Bad reminder format")
-                offset_time = dt.dt.timedelta()
-            else:
-                offset_time = -offset_time
-
-        # cleanup the string so we don't have a bunch of double+ spaces
-        self._cal_data['message'] = summary
-
-        self._cal_data['offset_time'] = offset_time
-        self._cal_data['location'] = self.data.event.get('location', '')
-        self._cal_data['description'] = self.data.event.get('description', '')
-        self._cal_data['url'] = self.data.event.get('url', '')
-        self._cal_data['start'] = start
-        self._cal_data['end'] = end
-        self._cal_data['all_day'] = 'date' in self.data.event['start']
 
 
 class PyMyCityData(object):
@@ -150,7 +102,9 @@ class PyMyCityData(object):
         self._state = None
         self._all_data = None
         self.event = None
-        self.color = color
+        self._color = color
+        self._event_list = []
+
         # try to create a good name
         if name is None:
             tmp_text = []
@@ -173,42 +127,65 @@ class PyMyCityData(object):
     async def async_update(self):
         """Get the latest data."""
         try:
-            results = await getattr(self.city, self.command)(**self.params)
+            event_list = await getattr(self.city, self.command)(**self.params)
         # Improve this
         except Exception as exp:  # pylint: disable=W0703
             _LOGGER.error("Error on receive last PyMyCity data: %s", exp)
             return
         # If no matching event could be found
-        if not results:
+        if not event_list:
             _LOGGER.error(
                 "No matching event found in the %d results for %s",
-                len(results), self._name)
+                len(event_list), self._name)
             self.event = None
             return True
 
-        for event in results:
-            self.hass.data[DOMAIN][self._name].async_add(
-                title=event.title,
-                start=self.get_hass_date(event.start),
-                end=self.get_hass_date(self.get_end_date(event)),
-                location=event.location,
-                color=self.color,
-                description=event.description,
-                url=event.url,)
+        for event in event_list:
+            data = {
+                # Improve UID
+                "uid": event.title.lower().replace(" ",""),
+                "title": event.title,
+                "start": self.get_hass_date(event.start),
+                "end": self.get_hass_date(self.get_end_date(event)),
+                "location": event.location,
+                "description": event.description,
+                "url": event.url,
+                "color": self._color,
+            }
+            def _get_date(date):
+                """Get the dateTime from date or dateTime as a local."""
+                if 'date' in date:
+                    return dt.start_of_local_day(dt.dt.datetime.combine(
+                        dt.parse_date(date['date']), dt.dt.time.min))
+                return dt.as_local(dt.parse_datetime(date['dateTime']))
 
-        event = results[0]
+            data['start'] = _get_date(data['start']).isoformat()
+            data['end'] = _get_date(data['end']).isoformat()
+
+            self._event_list.append(data)
+
+        event = event_list[0]
 
         # Populate the entity attributes with the event values
         self.event = {
-            #"summary": event.title,
+            # Improve UID
+            "uid": event.title.lower().replace(" ",""),
             "title": event.title,
             "start": self.get_hass_date(event.start),
             "end": self.get_hass_date(self.get_end_date(event)),
             "location": event.location,
             "description": event.description,
             "url": event.url,
+            "color": self._color,
         }
         return True
+
+    @staticmethod
+    def get_attr_value(obj, attribute):
+        """Return the value of the attribute if defined."""
+        if hasattr(obj, attribute):
+            return getattr(obj, attribute).value
+        return None
 
     @staticmethod
     def get_hass_date(obj):
@@ -231,3 +208,8 @@ class PyMyCityData(object):
             enddate = obj.start + timedelta(days=1)
 
         return enddate
+
+    @property
+    def event_list(self):
+        """Return calendar event list."""
+        return self._event_list
