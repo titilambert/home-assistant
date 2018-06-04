@@ -140,6 +140,7 @@ class PyMyCityData(object):
             self.event = None
             return True
 
+        self._event_list = []
         for event in event_list:
             data = {
                 # Improve UID
