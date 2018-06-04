@@ -167,12 +167,11 @@ class CalendarEventDevice(Entity):
 
     def update(self):
         """Search for the next event."""
-        self._event_list = self.data.event_list
-
         if not self.data or not self.data.update():
             # update cached, don't do anything
             return
 
+        self._event_list = self.data.event_list
         if not self.data.event:
             # we have no event to work on, make sure we're clean
             self.cleanup()
@@ -262,9 +261,8 @@ class AsyncCalendarEventDevice(CalendarEventDevice):
 
     async def async_update(self):
         """Search for the next event."""
-        self._event_list = self.data.event_list
-
         ret = await self.data.async_update()
+        self._event_list = self.data.event_list
         if not self.data or not ret:
             # update cached, don't do anything
             return

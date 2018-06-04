@@ -15,7 +15,7 @@ from homeassistant.const import CONF_NAME
 import homeassistant.helpers.config_validation as cv
 from homeassistant.util import Throttle, dt
 
-REQUIREMENTS = ['pymycity==0.2.6']
+REQUIREMENTS = ['pymycity==0.2.7']
 
 
 SUBDOMAIN = 'pymycity'

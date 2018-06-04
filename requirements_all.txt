@@ -893,7 +893,7 @@ pymonoprice==0.3
 pymusiccast==0.1.6
 
 # homeassistant.components.calendar.pymycity
-pymycity==0.2.6
+pymycity==0.2.7
 
 # homeassistant.components.cover.myq
 pymyq==0.0.8
