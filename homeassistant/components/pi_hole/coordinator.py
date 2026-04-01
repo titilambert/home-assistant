@@ -19,6 +19,16 @@ from .const import MIN_TIME_BETWEEN_UPDATES, VERSION_6_RESPONSE_TO_5_ERROR
 _LOGGER = logging.getLogger(__name__)
 
 
+async def async_update_pihole_data(api: HoleV5 | HoleV6) -> None:
+    """Fetch statistics and version info from the Pi-hole API.
+
+    Shared by the in-process coordinator and the out-of-process remote daemon.
+    Callers are responsible for error handling.
+    """
+    await api.get_data()
+    await api.get_versions()
+
+
 @dataclass
 class PiHoleData:
     """Runtime data definition."""
@@ -57,11 +67,7 @@ class PiHoleUpdateCoordinator(DataUpdateCoordinator[None]):
     async def _async_update_data(self) -> None:
         """Fetch data from the Pi-hole API."""
         try:
-            # TODO FROM CLAUDE: in remote mode, the HA core should never call this function,
-            # only the remote integration daemon should call it
-            _LOGGER.critical("BADDDDDD FFFFFFFFFFFFFFFF")
-            await self._api.get_data()
-            await self._api.get_versions()
+            await async_update_pihole_data(self._api)
             if "error" in (response := self._api.data):
                 match response["error"]:
                     case {

@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import aiohttp
 from hole import Hole
 from hole.exceptions import HoleError
 
+from homeassistant.components.pi_hole import api_by_version
+from homeassistant.components.pi_hole.coordinator import async_update_pihole_data
 from homeassistant.grpc import integration_pb2, integration_pb2_grpc
 from homeassistant.grpc.hass_proxy import HassProxy
 
@@ -55,7 +58,6 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
     async def Initialize(self, request, context):
         _LOGGER.info("Initialize: %s", request.integration_id)
 
-        # TODO FOR CLAUDE: why we don't reuse the code from the local mode ? in __init__.py
         self._hass = HassProxy(self._core_address)
 
         # Fetch config from Core — no local config needed
@@ -75,24 +77,24 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
 
         import ssl
 
-        import aiohttp
-
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
         connector = aiohttp.TCPConnector(ssl=ssl_ctx)
         session = aiohttp.ClientSession(connector=connector)
 
+        # Convert string values from the gRPC config map to proper types, then
+        # reuse api_by_version from the local integration (same logic, own session).
         use_ssl = data.get("ssl", "False").lower() == "true"
-        self._api = Hole(
-            host=data["host"],
-            session=session,
-            location=data.get("location", "admin"),
-            verify_tls=False,
-            version=6,
-            protocol="https" if use_ssl else "http",
-            password=data.get("api_key", ""),
-        )
+        verify_tls = data.get("verify_ssl", "True").lower() == "true"
+        api_data = {
+            "host": data["host"],
+            "location": data.get("location", "admin"),
+            "ssl": use_ssl,
+            "verify_ssl": verify_tls,
+            "api_key": data.get("api_key", ""),
+        }
+        self._api = api_by_version(api_data, 6, session)
 
         try:
             await self._api.authenticate()
@@ -148,7 +150,6 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
         return integration_pb2.CallServiceResponse(success=True)
 
     async def _update_loop(self) -> None:
-        # TODO FOR CLAUDE: why we don't reuse the code from the local mode ? in coordinator.py
         _LOGGER.info("Update loop started (30s interval)")
         while True:
             try:
@@ -162,7 +163,7 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
 
     async def _push_states(self) -> None:
         assert self._api is not None and self._hass is not None
-        await self._api.get_data()
+        await async_update_pihole_data(self._api)
         blocking_raw = self._api.data.get("blocking", {})
         is_blocking = (
             blocking_raw

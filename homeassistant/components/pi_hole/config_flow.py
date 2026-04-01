@@ -19,6 +19,7 @@ from homeassistant.const import (
     CONF_SSL,
     CONF_VERIFY_SSL,
 )
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from . import Hole, api_by_version, determine_api_version
 from .const import (
@@ -146,11 +147,14 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
 
     async def _async_try_connect(self) -> dict[str, str]:
         """Try to connect to the Pi-hole API and determine the version."""
+        session = async_get_clientsession(
+            self.hass, self._config.get(CONF_VERIFY_SSL, True)
+        )
         try:
-            version = await determine_api_version(hass=self.hass, entry=self._config)
+            version = await determine_api_version(self._config, session)
         except HoleError:
             return {"base": "cannot_connect"}
-        pi_hole: Hole = api_by_version(self.hass, self._config, version)
+        pi_hole: Hole = api_by_version(self._config, version, session)
 
         if version == 6:
             try:

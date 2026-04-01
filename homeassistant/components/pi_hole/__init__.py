@@ -41,11 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
 
     # --- REMOTE mode: delegate everything to the external integration process ---
     if entry.data.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
-        _LOGGER.critical("REMOTE")
-        # entry.async_on_unload(entry.add_update_listener(self._async_update_listener))
         return await _async_setup_remote(hass, entry)
-
-    _LOGGER.critical("LOCAL %s", entry.data)
 
     # remove obsolet CONF_STATISTICS_ONLY from entry.data
     if CONF_STATISTICS_ONLY in entry.data:
@@ -87,12 +83,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
 
     await er.async_migrate_entries(hass, entry.entry_id, update_unique_id)
 
+    session = async_get_clientsession(hass, entry.data[CONF_VERIFY_SSL])
     _LOGGER.debug("Determining Pi-hole API version for %s", host)
-    version = await determine_api_version(hass, dict(entry.data))
+    version = await determine_api_version(dict(entry.data), session)
     _LOGGER.debug("Pi-hole API version determined: %s", version)
 
     # Once API version 5 is deprecated we should instantiate Hole directly
-    api = api_by_version(hass, dict(entry.data), version)
+    api = api_by_version(dict(entry.data), version, session)
 
     coordinator = PiHoleUpdateCoordinator(hass, api, entry)
 
@@ -111,27 +108,12 @@ async def _async_setup_remote(hass: HomeAssistant, entry: PiHoleConfigEntry) -> 
     The Core gRPC server is already running (started in bootstrap).
     We only forward the switch platform so proxy entities can receive
     turn_on/turn_off commands and route them to the remote process.
+    All Pi-hole API calls are handled by the remote integration daemon.
     """
-
-    # TODO FOR CLAUDE: this part should be by the remote integration it self (if it possible)
-    host = entry.data[CONF_HOST]
-    _LOGGER.debug("Determining Pi-hole API version for %s", host)
-    version = await determine_api_version(hass, dict(entry.data))
-    _LOGGER.debug("Pi-hole API version determined: %s", version)
-
-    # Once API version 5 is deprecated we should instantiate Hole directly
-    api = api_by_version(hass, dict(entry.data), version)
-
-    coordinator = PiHoleUpdateCoordinator(hass, api, entry)
-
-    await coordinator.async_config_entry_first_refresh()
-
-    entry.runtime_data = PiHoleData(api, coordinator, version)
-
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SWITCH])
-    _LOGGER.critical(
+    _LOGGER.info(
         "Pi-hole entry %s in REMOTE mode — start the integration process:\n"
-        "  python -m homeassistant.components.pi_hole.remote.main",
+        "  python -m homeassistant.components.pi_hole.remote.main --core-address <HA_IP>",
         entry.entry_id,
     )
     return True
@@ -139,24 +121,24 @@ async def _async_setup_remote(hass: HomeAssistant, entry: PiHoleConfigEntry) -> 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload Pi-hole entry."""
-    if entry.data.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
-        return await hass.config_entries.async_unload_platforms(
-            entry, [Platform.SWITCH]
-        )
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    platforms = (
+        [Platform.SWITCH]
+        if entry.data.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE
+        else PLATFORMS
+    )
+    return await hass.config_entries.async_unload_platforms(entry, platforms)
 
 
 def api_by_version(
-    hass: HomeAssistant,
     entry: dict[str, Any],
     version: int,
+    session: object,
     password: str | None = None,
 ) -> HoleV5 | HoleV6:
     """Create a pi-hole API object by API version number. Once V5 is deprecated this function can be removed."""
 
     if password is None:
         password = entry.get(CONF_API_KEY, "")
-    session = async_get_clientsession(hass, entry[CONF_VERIFY_SSL])
     hole_kwargs = {
         "host": entry[CONF_HOST],
         "session": session,
@@ -175,7 +157,7 @@ def api_by_version(
 
 
 async def determine_api_version(
-    hass: HomeAssistant, entry: dict[str, Any]
+    entry: dict[str, Any], session: object
 ) -> Literal[5, 6]:
     """Determine the API version of the Pi-hole instance without requiring authentication.
 
@@ -185,7 +167,7 @@ async def determine_api_version(
     Because we are using endpoints that are not designed for this purpose, we should log liberally to help with debugging.
     """
 
-    holeV6 = api_by_version(hass, entry, 6, password="wrong_password")
+    holeV6 = api_by_version(entry, 6, session, password="wrong_password")
     try:
         await holeV6.authenticate()
     except HoleConnectionError as err:
@@ -213,7 +195,7 @@ async def determine_api_version(
             holeV6.base_url,
         )
         return 6
-    holeV5 = api_by_version(hass, entry, 5, password="wrong_token")
+    holeV5 = api_by_version(entry, 5, session, password="wrong_token")
     try:
         await holeV5.get_data()
 
