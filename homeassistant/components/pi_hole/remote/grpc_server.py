@@ -55,6 +55,7 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
     async def Initialize(self, request, context):
         _LOGGER.info("Initialize: %s", request.integration_id)
 
+        # TODO FOR CLAUDE: why we don't reuse the code from the local mode ? in __init__.py
         self._hass = HassProxy(self._core_address)
 
         # Fetch config from Core — no local config needed
@@ -66,9 +67,16 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
         self._entry_id = cfg.entry_id
         data = cfg.data
 
-        _LOGGER.info("Got config from Core: host=%s entry_id=%s", data.get("host"), self._entry_id)
+        _LOGGER.info(
+            "Got config from Core: host=%s entry_id=%s",
+            data.get("host"),
+            self._entry_id,
+        )
 
-        import aiohttp, ssl
+        import ssl
+
+        import aiohttp
+
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -122,7 +130,9 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
     async def CallService(self, request, context):
         _LOGGER.info("CallService: %s on %s", request.service, request.entity_id)
         if self._api is None:
-            return integration_pb2.CallServiceResponse(success=False, error="Not initialized")
+            return integration_pb2.CallServiceResponse(
+                success=False, error="Not initialized"
+            )
         try:
             if request.service == "turn_on":
                 await self._api.enable()
@@ -138,6 +148,7 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
         return integration_pb2.CallServiceResponse(success=True)
 
     async def _update_loop(self) -> None:
+        # TODO FOR CLAUDE: why we don't reuse the code from the local mode ? in coordinator.py
         _LOGGER.info("Update loop started (30s interval)")
         while True:
             try:
@@ -154,7 +165,8 @@ class IntegrationGrpcServicer(integration_pb2_grpc.IntegrationServiceServicer):
         await self._api.get_data()
         blocking_raw = self._api.data.get("blocking", {})
         is_blocking = (
-            blocking_raw if isinstance(blocking_raw, bool)
+            blocking_raw
+            if isinstance(blocking_raw, bool)
             else self._api.status == "enabled"
         )
         for entity_id, payload in _build_entity_states(

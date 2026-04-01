@@ -57,7 +57,9 @@ class PiHoleUpdateCoordinator(DataUpdateCoordinator[None]):
     async def _async_update_data(self) -> None:
         """Fetch data from the Pi-hole API."""
         try:
-            _LOGGER.critical("FFFFFFFFFFFFFFFF")
+            # TODO FROM CLAUDE: in remote mode, the HA core should never call this function,
+            # only the remote integration daemon should call it
+            _LOGGER.critical("BADDDDDD FFFFFFFFFFFFFFFF")
             await self._api.get_data()
             await self._api.get_versions()
             if "error" in (response := self._api.data):

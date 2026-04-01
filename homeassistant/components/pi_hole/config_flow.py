@@ -9,12 +9,7 @@ from typing import Any
 from hole.exceptions import HoleError
 import voluptuous as vol
 
-from homeassistant.config_entries import (
-    ConfigEntry,
-    ConfigFlow,
-    ConfigFlowResult,
-    OptionsFlow,
-)
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import (
     CONF_API_KEY,
     CONF_HOST,
@@ -74,12 +69,16 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                 }
             )
 
+            _LOGGER.critical("cffonfig %s", self._config)
             if not (errors := await self._async_try_connect()):
                 return self.async_create_entry(
                     title=user_input[CONF_NAME], data=self._config
                 )
+            _LOGGER.critical("cffonfig2 %s", self._config)
 
+        _LOGGER.critical("cffonfig4 %s", self._config)
         user_input = user_input or {}
+        _LOGGER.critical("cffonfig5 %s", self._config)
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(

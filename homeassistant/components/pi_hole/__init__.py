@@ -40,8 +40,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
     host = entry.data[CONF_HOST]
 
     # --- REMOTE mode: delegate everything to the external integration process ---
-    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+    if entry.data.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+        _LOGGER.critical("REMOTE")
+        # entry.async_on_unload(entry.add_update_listener(self._async_update_listener))
         return await _async_setup_remote(hass, entry)
+
+    _LOGGER.critical("LOCAL %s", entry.data)
 
     # remove obsolet CONF_STATISTICS_ONLY from entry.data
     if CONF_STATISTICS_ONLY in entry.data:
@@ -101,17 +105,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
     return True
 
 
-async def _async_setup_remote(
-    hass: HomeAssistant, entry: PiHoleConfigEntry
-) -> bool:
+async def _async_setup_remote(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bool:
     """Set up Pi-hole in REMOTE mode.
 
     The Core gRPC server is already running (started in bootstrap).
     We only forward the switch platform so proxy entities can receive
     turn_on/turn_off commands and route them to the remote process.
     """
+
+    # TODO FOR CLAUDE: this part should be by the remote integration it self (if it possible)
+    host = entry.data[CONF_HOST]
+    _LOGGER.debug("Determining Pi-hole API version for %s", host)
+    version = await determine_api_version(hass, dict(entry.data))
+    _LOGGER.debug("Pi-hole API version determined: %s", version)
+
+    # Once API version 5 is deprecated we should instantiate Hole directly
+    api = api_by_version(hass, dict(entry.data), version)
+
+    coordinator = PiHoleUpdateCoordinator(hass, api, entry)
+
+    await coordinator.async_config_entry_first_refresh()
+
+    entry.runtime_data = PiHoleData(api, coordinator, version)
+
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SWITCH])
-    _LOGGER.info(
+    _LOGGER.critical(
         "Pi-hole entry %s in REMOTE mode — start the integration process:\n"
         "  python -m homeassistant.components.pi_hole.remote.main",
         entry.entry_id,
@@ -121,8 +139,10 @@ async def _async_setup_remote(
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload Pi-hole entry."""
-    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
-        return await hass.config_entries.async_unload_platforms(entry, [Platform.SWITCH])
+    if entry.data.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+        return await hass.config_entries.async_unload_platforms(
+            entry, [Platform.SWITCH]
+        )
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

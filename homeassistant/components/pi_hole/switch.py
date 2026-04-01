@@ -32,7 +32,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Pi-hole switch."""
-    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+    if entry.data.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
         async_add_entities([PiHoleRemoteSwitch(hass, entry.entry_id)])
         return
 
