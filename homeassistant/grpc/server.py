@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.core import HomeAssistant
+import grpc.aio
 
-from . import core_pb2, core_pb2_grpc
+from homeassistant.core import HomeAssistant, callback
+
+from . import core_pb2, core_pb2_grpc, integration_pb2_grpc
 
 _LOGGER = logging.getLogger(__name__)
+
+EVENT_GRPC_INTEGRATION_REGISTERED = "grpc_integration_registered"
 
 
 class CoreGrpcServicer(core_pb2_grpc.CoreServiceServicer):
@@ -19,14 +23,10 @@ class CoreGrpcServicer(core_pb2_grpc.CoreServiceServicer):
 
     async def SetState(self, request, context):
         """Receive a state update from a remote integration and apply it to HA."""
-        attributes = dict(request.attributes)
-        _LOGGER.debug(
-            "gRPC SetState: %s = %s (attrs: %s)",
-            request.entity_id,
-            request.state,
-            attributes,
+        _LOGGER.debug("gRPC SetState: %s = %s", request.entity_id, request.state)
+        self.hass.states.async_set(
+            request.entity_id, request.state, dict(request.attributes)
         )
-        self.hass.states.async_set(request.entity_id, request.state, attributes)
         return core_pb2.SetStateResponse(success=True)
 
     async def GetState(self, request, context):
@@ -52,3 +52,52 @@ class CoreGrpcServicer(core_pb2_grpc.CoreServiceServicer):
             time_zone=str(cfg.time_zone),
             location_name=cfg.location_name,
         )
+
+    async def GetIntegrationConfig(self, request, context):
+        """Return config entry data for a given domain to the remote integration process."""
+        entries = self.hass.config_entries.async_entries(request.domain)
+        if not entries:
+            return core_pb2.GetIntegrationConfigResponse(found=False)
+        entry = entries[0]
+        # Serialize entry.data values as strings for the proto map<string,string>
+        data = {k: str(v) for k, v in entry.data.items()}
+        return core_pb2.GetIntegrationConfigResponse(
+            found=True,
+            entry_id=entry.entry_id,
+            data=data,
+        )
+
+    async def RegisterIntegration(self, request, context):
+        """Register a remote integration process: store its gRPC stub and notify HA."""
+        _LOGGER.info(
+            "RegisterIntegration: domain=%s id=%s address=%s entities=%s",
+            request.domain,
+            request.integration_id,
+            request.grpc_address,
+            list(request.entity_ids),
+        )
+
+        channel = grpc.aio.insecure_channel(request.grpc_address)
+        stub = integration_pb2_grpc.IntegrationServiceStub(channel)
+
+        stubs: dict = self.hass.data.setdefault("grpc_stubs", {})
+        stubs[request.domain] = stub
+
+        # Fire event so integrations set up in REMOTE mode can react
+        # (e.g. activate proxy switch entities)
+        @callback
+        def _fire():
+            self.hass.bus.async_fire(
+                EVENT_GRPC_INTEGRATION_REGISTERED,
+                {
+                    "domain": request.domain,
+                    "integration_id": request.integration_id,
+                    "grpc_address": request.grpc_address,
+                    "entity_ids": list(request.entity_ids),
+                    "switch_entity_ids": list(request.switch_entity_ids),
+                },
+            )
+
+        self.hass.loop.call_soon_threadsafe(_fire)
+
+        return core_pb2.RegisterIntegrationResponse(success=True)

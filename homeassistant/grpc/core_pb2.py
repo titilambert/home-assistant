@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ncore.proto\x12\x04\x63ore\"\xa1\x01\n\x0fSetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\x12\x39\n\nattributes\x18\x03 \x03(\x0b\x32%.core.SetStateRequest.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"2\n\x10SetStateResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"$\n\x0fGetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t\"\xc8\x01\n\x10GetStateResponse\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\x11\n\tentity_id\x18\x02 \x01(\t\x12\r\n\x05state\x18\x03 \x01(\t\x12:\n\nattributes\x18\x04 \x03(\x0b\x32&.core.GetStateResponse.AttributesEntry\x12\x14\n\x0clast_updated\x18\x05 \x01(\x03\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x12\n\x10GetConfigRequest\"u\n\x11GetConfigResponse\x12\x10\n\x08latitude\x18\x01 \x01(\x01\x12\x11\n\tlongitude\x18\x02 \x01(\x01\x12\x11\n\televation\x18\x03 \x01(\x01\x12\x11\n\ttime_zone\x18\x04 \x01(\t\x12\x15\n\rlocation_name\x18\x05 \x01(\t2\xc1\x01\n\x0b\x43oreService\x12\x39\n\x08SetState\x12\x15.core.SetStateRequest\x1a\x16.core.SetStateResponse\x12\x39\n\x08GetState\x12\x15.core.GetStateRequest\x1a\x16.core.GetStateResponse\x12<\n\tGetConfig\x12\x16.core.GetConfigRequest\x1a\x17.core.GetConfigResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ncore.proto\x12\x04\x63ore\"\xa1\x01\n\x0fSetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\x12\x39\n\nattributes\x18\x03 \x03(\x0b\x32%.core.SetStateRequest.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"2\n\x10SetStateResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"$\n\x0fGetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t\"\xc8\x01\n\x10GetStateResponse\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\x11\n\tentity_id\x18\x02 \x01(\t\x12\r\n\x05state\x18\x03 \x01(\t\x12:\n\nattributes\x18\x04 \x03(\x0b\x32&.core.GetStateResponse.AttributesEntry\x12\x14\n\x0clast_updated\x18\x05 \x01(\x03\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x12\n\x10GetConfigRequest\"u\n\x11GetConfigResponse\x12\x10\n\x08latitude\x18\x01 \x01(\x01\x12\x11\n\tlongitude\x18\x02 \x01(\x01\x12\x11\n\televation\x18\x03 \x01(\x01\x12\x11\n\ttime_zone\x18\x04 \x01(\t\x12\x15\n\rlocation_name\x18\x05 \x01(\t\"-\n\x1bGetIntegrationConfigRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\"\xa8\x01\n\x1cGetIntegrationConfigResponse\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\x10\n\x08\x65ntry_id\x18\x02 \x01(\t\x12:\n\x04\x64\x61ta\x18\x03 \x03(\x0b\x32,.core.GetIntegrationConfigResponse.DataEntry\x1a+\n\tDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x89\x01\n\x1aRegisterIntegrationRequest\x12\x16\n\x0eintegration_id\x18\x01 \x01(\t\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\x14\n\x0cgrpc_address\x18\x03 \x01(\t\x12\x12\n\nentity_ids\x18\x04 \x03(\t\x12\x19\n\x11switch_entity_ids\x18\x05 \x03(\t\"=\n\x1bRegisterIntegrationResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t2\xfc\x02\n\x0b\x43oreService\x12\x39\n\x08SetState\x12\x15.core.SetStateRequest\x1a\x16.core.SetStateResponse\x12\x39\n\x08GetState\x12\x15.core.GetStateRequest\x1a\x16.core.GetStateResponse\x12<\n\tGetConfig\x12\x16.core.GetConfigRequest\x1a\x17.core.GetConfigResponse\x12]\n\x14GetIntegrationConfig\x12!.core.GetIntegrationConfigRequest\x1a\".core.GetIntegrationConfigResponse\x12Z\n\x13RegisterIntegration\x12 .core.RegisterIntegrationRequest\x1a!.core.RegisterIntegrationResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,6 +35,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SETSTATEREQUEST_ATTRIBUTESENTRY']._serialized_options = b'8\001'
   _globals['_GETSTATERESPONSE_ATTRIBUTESENTRY']._loaded_options = None
   _globals['_GETSTATERESPONSE_ATTRIBUTESENTRY']._serialized_options = b'8\001'
+  _globals['_GETINTEGRATIONCONFIGRESPONSE_DATAENTRY']._loaded_options = None
+  _globals['_GETINTEGRATIONCONFIGRESPONSE_DATAENTRY']._serialized_options = b'8\001'
   _globals['_SETSTATEREQUEST']._serialized_start=21
   _globals['_SETSTATEREQUEST']._serialized_end=182
   _globals['_SETSTATEREQUEST_ATTRIBUTESENTRY']._serialized_start=133
@@ -51,6 +53,16 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETCONFIGREQUEST']._serialized_end=495
   _globals['_GETCONFIGRESPONSE']._serialized_start=497
   _globals['_GETCONFIGRESPONSE']._serialized_end=614
-  _globals['_CORESERVICE']._serialized_start=617
-  _globals['_CORESERVICE']._serialized_end=810
+  _globals['_GETINTEGRATIONCONFIGREQUEST']._serialized_start=616
+  _globals['_GETINTEGRATIONCONFIGREQUEST']._serialized_end=661
+  _globals['_GETINTEGRATIONCONFIGRESPONSE']._serialized_start=664
+  _globals['_GETINTEGRATIONCONFIGRESPONSE']._serialized_end=832
+  _globals['_GETINTEGRATIONCONFIGRESPONSE_DATAENTRY']._serialized_start=789
+  _globals['_GETINTEGRATIONCONFIGRESPONSE_DATAENTRY']._serialized_end=832
+  _globals['_REGISTERINTEGRATIONREQUEST']._serialized_start=835
+  _globals['_REGISTERINTEGRATIONREQUEST']._serialized_end=972
+  _globals['_REGISTERINTEGRATIONRESPONSE']._serialized_start=974
+  _globals['_REGISTERINTEGRATIONRESPONSE']._serialized_end=1035
+  _globals['_CORESERVICE']._serialized_start=1038
+  _globals['_CORESERVICE']._serialized_end=1418
 # @@protoc_insertion_point(module_scope)

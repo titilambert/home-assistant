@@ -20,6 +20,14 @@ class HAConfig:
     location_name: str
 
 
+@dataclass
+class IntegrationConfig:
+    """Config entry data returned by the Core to the remote integration."""
+
+    entry_id: str
+    data: dict[str, str]
+
+
 class StatesProxy:
     """Proxy for hass.states — routes async_set/get through gRPC."""
 
@@ -50,9 +58,8 @@ class HassProxy:
 
     def __init__(self, core_address: str = "localhost:50051") -> None:
         self._channel = grpc.aio.insecure_channel(core_address)
-        stub = core_pb2_grpc.CoreServiceStub(self._channel)
-        self.states = StatesProxy(stub)
-        self._stub = stub
+        self._stub = core_pb2_grpc.CoreServiceStub(self._channel)
+        self.states = StatesProxy(self._stub)
 
     async def get_config(self) -> HAConfig:
         """Fetch HA core configuration from the Core gRPC server."""
@@ -63,6 +70,34 @@ class HassProxy:
             elevation=resp.elevation,
             time_zone=resp.time_zone,
             location_name=resp.location_name,
+        )
+
+    async def get_integration_config(self, domain: str) -> IntegrationConfig:
+        """Fetch integration config entry data (host, password, etc.) from Core."""
+        resp = await self._stub.GetIntegrationConfig(
+            core_pb2.GetIntegrationConfigRequest(domain=domain)
+        )
+        if not resp.found:
+            raise RuntimeError(f"No config entry found for domain '{domain}' in HA")
+        return IntegrationConfig(entry_id=resp.entry_id, data=dict(resp.data))
+
+    async def register_integration(
+        self,
+        integration_id: str,
+        domain: str,
+        grpc_address: str,
+        entity_ids: list[str],
+        switch_entity_ids: list[str] | None = None,
+    ) -> None:
+        """Register this remote process with the Core so it can route service calls back."""
+        await self._stub.RegisterIntegration(
+            core_pb2.RegisterIntegrationRequest(
+                integration_id=integration_id,
+                domain=domain,
+                grpc_address=grpc_address,
+                entity_ids=entity_ids,
+                switch_entity_ids=switch_entity_ids or [],
+            )
         )
 
     async def close(self) -> None:

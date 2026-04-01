@@ -2,12 +2,11 @@
 
 Usage:
     python -m homeassistant.components.pi_hole.remote.main \\
-        --host pihole.example.com \\
-        --password YOUR_PASSWORD \\
-        [--port 50052] \\
         [--core-address localhost:50051] \\
-        [--location admin] \\
-        [--protocol https]
+        [--port 50052]
+
+All Pi-hole configuration (host, password, SSL, …) is fetched from the
+Home Assistant Core via gRPC — no local config needed.
 """
 
 from __future__ import annotations
@@ -15,11 +14,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import socket
 import sys
 
 import grpc.aio
 
-from homeassistant.components.pi_hole.remote import integration_pb2_grpc
+from homeassistant.grpc import integration_pb2, integration_pb2_grpc
 from homeassistant.components.pi_hole.remote.grpc_server import IntegrationGrpcServicer
 
 logging.basicConfig(
@@ -29,58 +29,50 @@ logging.basicConfig(
 _LOGGER = logging.getLogger(__name__)
 
 
-async def run(args: argparse.Namespace) -> None:
-    integration_id = f"pihole_{args.host.replace('.', '_')}"
+def _own_address(port: int) -> str:
+    """Return a reachable address for this process (used to register with Core)."""
+    hostname = socket.gethostname()
+    try:
+        ip = socket.gethostbyname(hostname)
+    except OSError:
+        ip = "127.0.0.1"
+    return f"{ip}:{port}"
 
-    # 1. Start the integration gRPC server
+
+async def run(args: argparse.Namespace) -> None:
+    own_address = _own_address(args.port)
+
     server = grpc.aio.server()
-    servicer = IntegrationGrpcServicer(core_address=args.core_address)
+    servicer = IntegrationGrpcServicer(
+        core_address=args.core_address,
+        own_grpc_address=own_address,
+    )
     integration_pb2_grpc.add_IntegrationServiceServicer_to_server(servicer, server)
     server.add_insecure_port(f"[::]:{args.port}")
     await server.start()
-    _LOGGER.info("Integration gRPC server listening on port %d", args.port)
-
-    # 2. Call Initialize on ourselves
-    from homeassistant.components.pi_hole.remote import integration_pb2
+    _LOGGER.info("Pi-hole integration gRPC server on port %d (advertising %s)", args.port, own_address)
 
     init_resp = await servicer.Initialize(
-        integration_pb2.InitRequest(
-            integration_id=integration_id,
-            config={
-                "host": args.host,
-                "password": args.password,
-                "location": args.location,
-                "protocol": args.protocol,
-                "ssl": "true" if args.protocol == "https" else "false",
-            },
-        ),
+        integration_pb2.InitRequest(integration_id="pi_hole", config={}),
         context=None,
     )
-
     if not init_resp.success:
         _LOGGER.error("Initialization failed: %s", init_resp.error)
         await server.stop(0)
         sys.exit(1)
 
-    _LOGGER.info("Entities registered: %s", list(init_resp.entity_ids))
-
-    # 3. Start polling loop
     await servicer.Start(
-        integration_pb2.StartRequest(integration_id=integration_id),
+        integration_pb2.StartRequest(integration_id="pi_hole"),
         context=None,
     )
 
-    _LOGGER.info(
-        "Pi-hole remote integration running. Core at %s. Press Ctrl+C to stop.",
-        args.core_address,
-    )
-
+    _LOGGER.info("Running. Core at %s. Ctrl+C to stop.", args.core_address)
     try:
         await server.wait_for_termination()
     except (KeyboardInterrupt, asyncio.CancelledError):
-        _LOGGER.info("Shutting down...")
+        _LOGGER.info("Shutting down…")
         await servicer.Stop(
-            integration_pb2.StopRequest(integration_id=integration_id),
+            integration_pb2.StopRequest(integration_id="pi_hole"),
             context=None,
         )
         await server.stop(grace=2)
@@ -88,14 +80,9 @@ async def run(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pi-hole remote integration service")
-    parser.add_argument("--host", required=True, help="Pi-hole hostname or IP")
-    parser.add_argument("--password", required=True, help="Pi-hole password / app-password")
-    parser.add_argument("--location", default="admin", help="Pi-hole web location (default: admin)")
-    parser.add_argument("--protocol", default="https", choices=["http", "https"])
-    parser.add_argument("--port", type=int, default=50052, help="gRPC port for this service (default: 50052)")
-    parser.add_argument("--core-address", default="localhost:50051", help="HA Core gRPC address (default: localhost:50051)")
+    parser.add_argument("--core-address", default="localhost:50051")
+    parser.add_argument("--port", type=int, default=50052)
     args = parser.parse_args()
-
     asyncio.run(run(args))
 
 

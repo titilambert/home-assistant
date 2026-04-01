@@ -9,7 +9,7 @@ from typing import Any
 from hole.exceptions import HoleError
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import (
     CONF_API_KEY,
     CONF_HOST,
@@ -22,20 +22,50 @@ from homeassistant.const import (
 
 from . import Hole, api_by_version, determine_api_version
 from .const import (
+    CONF_RUNTIME_MODE,
     DEFAULT_LOCATION,
     DEFAULT_NAME,
+    DEFAULT_RUNTIME_MODE,
     DEFAULT_SSL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    RUNTIME_MODE_LOCAL,
+    RUNTIME_MODE_REMOTE,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class PiHoleOptionsFlowHandler(OptionsFlow):
+    """Handle Pi-hole options (runtime mode selection)."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        current_mode = self.config_entry.options.get(CONF_RUNTIME_MODE, DEFAULT_RUNTIME_MODE)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_RUNTIME_MODE, default=current_mode): vol.In(
+                        [RUNTIME_MODE_LOCAL, RUNTIME_MODE_REMOTE]
+                    ),
+                }
+            ),
+        )
 
 
 class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a Pi-hole config flow."""
 
     VERSION = 1
+
+    @staticmethod
+    def async_get_options_flow(config_entry: ConfigEntry) -> PiHoleOptionsFlowHandler:
+        return PiHoleOptionsFlowHandler()
 
     def __init__(self) -> None:
         """Initialize the config flow."""

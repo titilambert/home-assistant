@@ -14,7 +14,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import SERVICE_DISABLE, SERVICE_DISABLE_ATTR_DURATION
+from .const import (
+    CONF_RUNTIME_MODE,
+    RUNTIME_MODE_REMOTE,
+    SERVICE_DISABLE,
+    SERVICE_DISABLE_ATTR_DURATION,
+)
 from .coordinator import PiHoleConfigEntry
 from .entity import PiHoleEntity
 
@@ -27,6 +32,10 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Pi-hole switch."""
+    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+        async_add_entities([PiHoleRemoteSwitch(hass, entry.entry_id)])
+        return
+
     name = entry.data[CONF_NAME]
     hole_data = entry.runtime_data
     switches = [
@@ -50,6 +59,46 @@ async def async_setup_entry(
         },
         "async_disable",
     )
+
+
+class PiHoleRemoteSwitch(SwitchEntity):
+    """Proxy switch that forwards turn_on/turn_off to the remote Pi-hole process via gRPC."""
+
+    _attr_icon = "mdi:pi-hole"
+    _attr_should_poll = True
+
+    def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
+        self._hass = hass
+        self._entry_id = entry_id
+        self._remote_entity_id = f"switch.pi_hole_{entry_id}"
+        self._attr_name = "Pi-hole"
+        self._attr_unique_id = f"{entry_id}/remote_switch"
+
+    @property
+    def is_on(self) -> bool:
+        state = self._hass.states.get(self._remote_entity_id)
+        return state is not None and state.state == "on"
+
+    async def _call_remote(self, service: str) -> None:
+        from homeassistant.grpc import integration_pb2
+
+        stub = self._hass.data.get("grpc_stubs", {}).get("pi_hole")
+        if stub is None:
+            _LOGGER.warning("Remote Pi-hole integration not registered yet")
+            return
+        await stub.CallService(
+            integration_pb2.CallServiceRequest(
+                integration_id=self._entry_id,
+                entity_id=self._remote_entity_id,
+                service=service,
+            )
+        )
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._call_remote("turn_on")
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._call_remote("turn_off")
 
 
 class PiHoleSwitch(PiHoleEntity, SwitchEntity):

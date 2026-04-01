@@ -107,18 +107,14 @@ async def _async_setup_remote(
     """Set up Pi-hole in REMOTE mode.
 
     The Core gRPC server is already running (started in bootstrap).
-    The actual polling and entity state management is handled by the external
-    integration process (homeassistant.components.pi_hole.remote.main).
-    States pushed by that process arrive via gRPC and are written directly
-    into hass.states — they appear in the UI without HA-managed entity objects.
+    We only forward the switch platform so proxy entities can receive
+    turn_on/turn_off commands and route them to the remote process.
     """
+    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SWITCH])
     _LOGGER.info(
-        "Pi-hole entry %s configured in REMOTE mode. "
-        "Start the integration process with:\n"
-        "  python -m homeassistant.components.pi_hole.remote.main "
-        "--host %s --password <PASSWORD>",
+        "Pi-hole entry %s in REMOTE mode — start the integration process:\n"
+        "  python -m homeassistant.components.pi_hole.remote.main",
         entry.entry_id,
-        entry.data[CONF_HOST],
     )
     return True
 
@@ -126,8 +122,7 @@ async def _async_setup_remote(
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload Pi-hole entry."""
     if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
-        # Nothing platform-specific to unload in REMOTE mode.
-        return True
+        return await hass.config_entries.async_unload_platforms(entry, [Platform.SWITCH])
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

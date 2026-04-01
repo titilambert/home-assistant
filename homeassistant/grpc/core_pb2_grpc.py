@@ -49,6 +49,16 @@ class CoreServiceStub(object):
                 request_serializer=core__pb2.GetConfigRequest.SerializeToString,
                 response_deserializer=core__pb2.GetConfigResponse.FromString,
                 _registered_method=True)
+        self.GetIntegrationConfig = channel.unary_unary(
+                '/core.CoreService/GetIntegrationConfig',
+                request_serializer=core__pb2.GetIntegrationConfigRequest.SerializeToString,
+                response_deserializer=core__pb2.GetIntegrationConfigResponse.FromString,
+                _registered_method=True)
+        self.RegisterIntegration = channel.unary_unary(
+                '/core.CoreService/RegisterIntegration',
+                request_serializer=core__pb2.RegisterIntegrationRequest.SerializeToString,
+                response_deserializer=core__pb2.RegisterIntegrationResponse.FromString,
+                _registered_method=True)
 
 
 class CoreServiceServicer(object):
@@ -72,6 +82,18 @@ class CoreServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetIntegrationConfig(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RegisterIntegration(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CoreServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -89,6 +111,16 @@ def add_CoreServiceServicer_to_server(servicer, server):
                     servicer.GetConfig,
                     request_deserializer=core__pb2.GetConfigRequest.FromString,
                     response_serializer=core__pb2.GetConfigResponse.SerializeToString,
+            ),
+            'GetIntegrationConfig': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetIntegrationConfig,
+                    request_deserializer=core__pb2.GetIntegrationConfigRequest.FromString,
+                    response_serializer=core__pb2.GetIntegrationConfigResponse.SerializeToString,
+            ),
+            'RegisterIntegration': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterIntegration,
+                    request_deserializer=core__pb2.RegisterIntegrationRequest.FromString,
+                    response_serializer=core__pb2.RegisterIntegrationResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -172,6 +204,60 @@ class CoreService(object):
             '/core.CoreService/GetConfig',
             core__pb2.GetConfigRequest.SerializeToString,
             core__pb2.GetConfigResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetIntegrationConfig(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/core.CoreService/GetIntegrationConfig',
+            core__pb2.GetIntegrationConfigRequest.SerializeToString,
+            core__pb2.GetIntegrationConfigResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RegisterIntegration(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/core.CoreService/RegisterIntegration',
+            core__pb2.RegisterIntegrationRequest.SerializeToString,
+            core__pb2.RegisterIntegrationResponse.FromString,
             options,
             channel_credentials,
             insecure,
