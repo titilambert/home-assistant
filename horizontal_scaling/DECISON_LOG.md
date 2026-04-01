@@ -357,7 +357,7 @@ Core:
 
 ## Executor Abstraction
 
-**Decision:** Create separate Executor classes (ProcessExecutor, DockerExecutor, KubernetesExecutor) to manage integration lifecycle
+**Decision:** Create separate Executor classes (ProcessExecutor, DockerExecutor, KubernetesDedicatedExecutor, KubernetesWorkerExecutor) to manage integration lifecycle
 
 **Date:** 2024
 
@@ -365,7 +365,8 @@ Core:
 Remote integrations can run as:
 - Local subprocess
 - Docker container
-- Kubernetes pod
+- Kubernetes pod (dedicated - 1 integration per pod)
+- Kubernetes pod (worker - multiple integrations per pod)
 
 How do we abstract this?
 
@@ -406,7 +407,8 @@ class ExecutorBase(ABC):
 **Implementations:**
 - `ProcessExecutor`: Launches subprocess, finds free port
 - `DockerExecutor`: Creates container with resource limits
-- `KubernetesExecutor`: Creates Pod + Service, returns DNS address
+- `KubernetesDedicatedExecutor`: Creates dedicated Pod + Service per integration
+- `KubernetesWorkerExecutor`: Finds/creates Worker Pod, calls Initialize on existing worker
 
 **Usage:**
 
@@ -419,6 +421,132 @@ class RemoteRuntime:
         grpc_address = await self.executor.start('pi_hole', config)
         self.grpc_stub = connect_to(grpc_address)
 ```
+
+---
+
+## Worker vs Dedicated Pods
+
+**Decision:** Support both dedicated pods (1 integration = 1 pod) AND worker pods (N integrations = 1 pod)
+
+**Date:** 2024
+
+**Context:**
+For Kubernetes deployments, should we:
+- Always create 1 pod per integration (dedicated)?
+- Always share pods between integrations (worker)?
+- Support both modes?
+
+**Problem with Dedicated-Only:**
+- With 50 integrations → 50 pods
+- High resource overhead (even with small requests/limits)
+- Cluster sprawl
+
+**Problem with Worker-Only:**
+- No isolation between integrations
+- One crash affects all integrations in worker
+- Harder to debug and manage
+
+**Alternatives Considered:**
+
+1. **Dedicated pods only**
+   - Pros: Maximum isolation, simple routing
+   - Cons: High resource overhead at scale
+
+2. **Worker pods only**
+   - Pros: Very efficient resource usage
+   - Cons: No isolation, complex routing
+
+3. **Support both, user chooses** ✅
+   - Pros: Flexibility, optimize per use case
+   - Cons: Two implementations to maintain
+
+**Decision Rationale:**
+
+**Support both modes** because different integrations have different needs:
+
+**Use Dedicated for:**
+- Mission-critical integrations (alarm, security)
+- Resource-intensive integrations
+- Integrations that need full isolation
+- Production-grade deployments with strict SLAs
+
+**Use Worker for:**
+- Many lightweight integrations (sensors, switches)
+- Cost optimization (cloud K8s billing)
+- Development/testing environments
+- Non-critical integrations
+
+**Implementation:**
+
+```python
+class RuntimeMode(Enum):
+    LOCAL = "local"
+    REMOTE_DEDICATED = "remote_dedicated"  # 1 pod per integration
+    REMOTE_WORKER = "remote_worker"        # Shared worker pod
+```
+
+**UI Configuration:**
+
+```yaml
+# Dedicated mode
+Integration: Alarm System
+Runtime Mode: Remote Dedicated
+Executor: Kubernetes
+
+# Worker mode
+Integration: Temperature Sensor
+Runtime Mode: Remote Worker
+Worker: worker-1  # Select existing or create new
+```
+
+**Worker Architecture:**
+
+```python
+class WorkerGrpcServer:
+    """Multi-tenant gRPC server running in Worker Pod"""
+    
+    def __init__(self):
+        self.integrations = {}  # {integration_id: Integration instance}
+    
+    async def Initialize(self, request, context):
+        integration_id = request.integration_id
+        integration_type = request.integration_type  # "pi_hole", "esphome"
+        
+        # Load integration class dynamically
+        IntegrationClass = load_integration_class(integration_type)
+        integration = IntegrationClass(request.config)
+        
+        self.integrations[integration_id] = integration
+        await integration.async_initialize()
+    
+    async def CallService(self, request, context):
+        # Route by integration_id
+        integration = self.integrations[request.integration_id]
+        await integration.call_service(request.service, request.data)
+```
+
+**Protocol Changes:**
+
+All messages require `integration_id` for routing in worker mode:
+
+```protobuf
+message CallServiceRequest {
+  string integration_id = 1;    // Required for worker routing
+  string entity_id = 2;
+  string service = 3;
+  map<string, string> data = 4;
+}
+```
+
+**Trade-offs Accepted:**
+- More complexity (two K8s executors)
+- Worker routing requires integration_id in all messages
+- This is acceptable because it provides flexibility where needed
+
+**Phasing:**
+- Phase 3: Implement KubernetesDedicatedExecutor (simpler)
+- Phase 4: Implement KubernetesWorkerExecutor (more complex)
+- Users can start with Dedicated, migrate to Worker when they have many integrations
 
 ---
 

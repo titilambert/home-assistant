@@ -127,7 +127,11 @@ Flow:
 
 ### REMOTE Mode (New)
 
-Integration runs in a separate process:
+Integration runs in a separate process. Two sub-modes:
+
+#### REMOTE_DEDICATED Mode
+
+Each integration runs in its own isolated process/container/pod.
 
 ```
 components/pi_hole/
@@ -149,11 +153,57 @@ Flow:
 ```
 
 **Characteristics:**
-- Separate process/container/pod
+- Separate process/container/pod per integration
 - gRPC communication
-- Isolated failures
-- Resource limits
+- Maximum isolation
+- Individual resource limits
 - Hot reload capability
+
+#### REMOTE_WORKER Mode
+
+Multiple integrations share a Worker process/container/pod for efficiency.
+
+```
+Worker Pod (worker-1):
+  ├── Pi-hole Integration (integration_id: abc-123)
+  ├── ESPHome Integration (integration_id: def-456)
+  ├── Nest Integration (integration_id: ghi-789)
+  └── Multi-tenant gRPC Server
+      Routes calls by integration_id
+
+Flow:
+  Core → factory chooses REMOTE_WORKER
+      → WorkerExecutor finds available worker
+      → WorkerExecutor.Initialize(integration_id, type, config) via gRPC
+      → Worker loads integration class and starts it
+      → Core.CallService(integration_id, ...) → gRPC → Worker routes to integration
+      → Integration.async_update() → hass_proxy.SetState() → gRPC → Core
+```
+
+**Characteristics:**
+- Multiple integrations per worker
+- Shared gRPC server (routes by integration_id)
+- Resource efficiency (5-10 integrations per worker)
+- Reduced isolation (integrations share resources)
+- Lower overhead for many integrations
+
+**Mode Selection:**
+
+```yaml
+# UI Configuration
+Integration: Pi-hole
+
+# Option 1: LOCAL (default)
+Runtime Mode: Local
+
+# Option 2: REMOTE DEDICATED (maximum isolation)
+Runtime Mode: Remote Dedicated
+Executor: Kubernetes  # or Process, Docker
+
+# Option 3: REMOTE WORKER (resource efficiency)
+Runtime Mode: Remote Worker
+Worker: worker-1  # Select existing or create new worker
+```
 
 ## Executors
 
@@ -207,9 +257,9 @@ Runs the integration in a Docker container.
 - ❌ Requires Docker
 - ❌ Slightly higher overhead
 
-### KubernetesExecutor
+### KubernetesDedicatedExecutor
 
-Runs the integration in a Kubernetes Pod.
+Runs each integration in its own dedicated Kubernetes Pod.
 
 **Responsibilities:**
 - Create Pod manifest with:
@@ -222,18 +272,64 @@ Runs the integration in a Kubernetes Pod.
 - Wait for Pod to become Ready
 - Return gRPC address: `{service-name}.{namespace}.svc.cluster.local:50051`
 
-**Use case:** Production scale, orchestration, high availability
+**Use case:** Production scale, maximum isolation, single-integration workloads
 
 **Pros:**
+- ✅ Maximum isolation (one integration per pod)
+- ✅ Individual resource limits
 - ✅ Automatic orchestration (scheduling, restart)
-- ✅ Native scaling (HPA)
-- ✅ Centralized logging/monitoring
-- ✅ Load balancing
-- ✅ Rolling updates
+- ✅ Independent scaling per integration
+- ✅ Failure isolation
 
 **Cons:**
 - ❌ Requires Kubernetes cluster
+- ❌ Higher resource overhead (more pods)
 - ❌ More complex setup
+
+### KubernetesWorkerExecutor
+
+Runs multiple integrations in shared Worker Pods for resource efficiency.
+
+**Responsibilities:**
+- Find or create a Worker Pod with available capacity
+- Connect to the Worker's gRPC server
+- Call `Initialize(integration_id, integration_type, config)` on the Worker
+- Worker loads and runs the integration alongside others
+- Return Worker's gRPC address (shared by multiple integrations)
+
+**Architecture:**
+
+```
+Worker Pod (e.g., worker-1):
+  ├── Integration 1: Pi-hole
+  ├── Integration 2: ESPHome
+  ├── Integration 3: Nest
+  └── Integration 4: Spotify
+  
+  Single gRPC server routes to integrations by integration_id
+```
+
+**Use case:** Resource optimization, many lightweight integrations, multi-tenancy
+
+**Pros:**
+- ✅ Much lower resource overhead (5-10 integrations per pod)
+- ✅ Shared Python dependencies
+- ✅ Better pod density
+- ✅ Cost effective for many integrations
+- ✅ Centralized worker management
+
+**Cons:**
+- ❌ Reduced isolation (integrations share pod resources)
+- ❌ Single failure affects all integrations in worker
+- ❌ More complex routing (integration_id required)
+- ❌ Requires multi-tenant worker implementation
+
+**Worker Selection Strategies:**
+
+1. **Manual**: User selects which worker to use
+2. **Automatic**: Core assigns to least-loaded worker
+3. **Affinity**: Group related integrations (e.g., all IoT in worker-1)
+4. **Auto-scaling**: Create new workers when existing ones are full
 
 ## Integration Migration Pattern
 
@@ -553,12 +649,12 @@ async def async_start(hass):
 
 **Success criteria:** Pi-hole runs in Docker container with resource limits
 
-### Phase 3: KubernetesExecutor
+### Phase 3: KubernetesDedicatedExecutor
 
-**Goal:** Production-ready orchestration
+**Goal:** Production-ready orchestration with maximum isolation
 
 **Scope:**
-- KubernetesExecutor implementation
+- KubernetesDedicatedExecutor implementation
 - Pod/Service manifest templates
 - Health checks and probes
 - Helm chart (optional)
@@ -567,7 +663,25 @@ async def async_start(hass):
 
 **Success criteria:** Pi-hole runs as K8s Pod, auto-restarts on failure
 
-### Phase 4: Complete Core API
+### Phase 4: KubernetesWorkerExecutor
+
+**Goal:** Resource-efficient multi-tenant workers
+
+**Scope:**
+- Worker Pod implementation (multi-tenant gRPC server)
+- KubernetesWorkerExecutor implementation
+- Worker discovery and selection logic
+- Worker auto-scaling (optional)
+- Worker management UI
+
+**Duration:** ~5 days
+
+**Success criteria:** 
+- Multiple integrations run in single Worker Pod
+- Core can route calls by integration_id
+- Worker scales when capacity reached
+
+### Phase 5: Complete Core API
 
 **Goal:** Support all hass.* APIs
 
@@ -582,7 +696,7 @@ async def async_start(hass):
 
 **Success criteria:** Complex integrations can be migrated
 
-### Phase 5: Generalization + Tooling
+### Phase 6: Generalization + Tooling
 
 **Goal:** Make migration easy for all integrations
 
@@ -596,6 +710,22 @@ async def async_start(hass):
 **Duration:** ~1 week
 
 **Success criteria:** Any developer can migrate an integration in < 1 day
+
+## Executor Comparison Matrix
+
+| Executor | Isolation | Resource Overhead | Use Case | Complexity |
+|----------|-----------|-------------------|----------|------------|
+| **ProcessExecutor** | Medium | Low (subprocess) | Development, debugging | Low |
+| **DockerExecutor** | High | Medium (container) | Production, isolation | Medium |
+| **KubernetesDedicatedExecutor** | Maximum | High (pod per integration) | Mission-critical, full isolation | High |
+| **KubernetesWorkerExecutor** | Low | Very Low (shared pod) | Many integrations, cost optimization | High |
+
+**Recommended strategies:**
+
+- **Small deployment (1-5 integrations)**: ProcessExecutor or DockerExecutor
+- **Medium deployment (5-20 integrations)**: KubernetesDedicatedExecutor
+- **Large deployment (20+ integrations)**: KubernetesWorkerExecutor
+- **Hybrid**: Critical integrations in Dedicated, others in Worker
 
 ## Integration Compatibility Matrix
 
