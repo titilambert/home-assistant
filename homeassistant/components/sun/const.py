@@ -14,6 +14,10 @@ STATE_ABOVE_HORIZON = "above_horizon"
 STATE_BELOW_HORIZON = "below_horizon"
 
 
+CONF_RUNTIME_MODE: Final = "runtime_mode"
+RUNTIME_MODE_LOCAL: Final = "local"
+RUNTIME_MODE_REMOTE: Final = "remote"
+
 STATE_ATTR_AZIMUTH = "azimuth"
 STATE_ATTR_ELEVATION = "elevation"
 STATE_ATTR_RISING = "rising"

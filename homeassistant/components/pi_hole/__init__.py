@@ -21,7 +21,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_STATISTICS_ONLY, DOMAIN
+from .const import (
+    CONF_RUNTIME_MODE,
+    CONF_STATISTICS_ONLY,
+    DOMAIN,
+    RUNTIME_MODE_REMOTE,
+)
 from .coordinator import PiHoleConfigEntry, PiHoleData, PiHoleUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +43,10 @@ PLATFORMS = [
 async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bool:
     """Set up Pi-hole entry."""
     host = entry.data[CONF_HOST]
+
+    # --- REMOTE mode: delegate everything to the external integration process ---
+    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+        return await _async_setup_remote(hass, entry)
 
     # remove obsolet CONF_STATISTICS_ONLY from entry.data
     if CONF_STATISTICS_ONLY in entry.data:
@@ -97,8 +106,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
     return True
 
 
+async def _async_setup_remote(
+    hass: HomeAssistant, entry: PiHoleConfigEntry
+) -> bool:
+    """Set up Pi-hole in REMOTE mode.
+
+    In this mode HA only runs the Core gRPC server.  The actual polling and
+    entity state management is handled by the external integration process
+    (homeassistant.components.pi_hole.remote.main).  States pushed by that
+    process arrive via gRPC and are written directly into hass.states — they
+    appear in the UI without HA-managed entity objects.
+    """
+    from homeassistant.grpc import start_grpc_server
+
+    # Start the Core gRPC server once per HA instance (shared across entries).
+    if DOMAIN + "_grpc_server" not in hass.data:
+        _LOGGER.info("Starting Core gRPC server (REMOTE mode enabled for %s)", DOMAIN)
+        server = await start_grpc_server(hass)
+        hass.data[DOMAIN + "_grpc_server"] = server
+
+    _LOGGER.info(
+        "Pi-hole entry %s configured in REMOTE mode. "
+        "Start the integration process with:\n"
+        "  python -m homeassistant.components.pi_hole.remote.main "
+        "--host %s --password <PASSWORD>",
+        entry.entry_id,
+        entry.data[CONF_HOST],
+    )
+    return True
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload Pi-hole entry."""
+    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+        # Nothing platform-specific to unload in REMOTE mode.
+        return True
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
