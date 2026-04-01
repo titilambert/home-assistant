@@ -57,6 +57,7 @@ class PiHoleUpdateCoordinator(DataUpdateCoordinator[None]):
     async def _async_update_data(self) -> None:
         """Fetch data from the Pi-hole API."""
         try:
+            _LOGGER.critical("FFFFFFFFFFFFFFFF")
             await self._api.get_data()
             await self._api.get_versions()
             if "error" in (response := self._api.data):

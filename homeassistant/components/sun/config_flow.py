@@ -6,8 +6,12 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.core import callback
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 
 from .const import (
     CONF_RUNTIME_MODE,
@@ -27,7 +31,9 @@ class SunOptionsFlowHandler(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        current_mode = self.config_entry.options.get(CONF_RUNTIME_MODE, RUNTIME_MODE_LOCAL)
+        current_mode = self.config_entry.options.get(
+            CONF_RUNTIME_MODE, RUNTIME_MODE_LOCAL
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -46,7 +52,6 @@ class SunConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
-    @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> SunOptionsFlowHandler:
         return SunOptionsFlowHandler()
 

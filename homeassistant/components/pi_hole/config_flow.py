@@ -9,8 +9,12 @@ from typing import Any
 from hole.exceptions import HoleError
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.core import callback
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import (
     CONF_API_KEY,
     CONF_HOST,
@@ -37,37 +41,10 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class PiHoleOptionsFlowHandler(OptionsFlow):
-    """Handle Pi-hole options (runtime mode selection)."""
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            return self.async_create_entry(data=user_input)
-
-        current_mode = self.config_entry.options.get(CONF_RUNTIME_MODE, DEFAULT_RUNTIME_MODE)
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_RUNTIME_MODE, default=current_mode): vol.In(
-                        [RUNTIME_MODE_LOCAL, RUNTIME_MODE_REMOTE]
-                    ),
-                }
-            ),
-        )
-
-
 class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a Pi-hole config flow."""
 
     VERSION = 1
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> PiHoleOptionsFlowHandler:
-        return PiHoleOptionsFlowHandler()
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -87,6 +64,7 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                 CONF_SSL: user_input[CONF_SSL],
                 CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
                 CONF_API_KEY: user_input[CONF_API_KEY],
+                CONF_RUNTIME_MODE: user_input[CONF_RUNTIME_MODE],
             }
 
             self._async_abort_entries_match(
@@ -129,6 +107,9 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL,
                         default=user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                     ): bool,
+                    vol.Required(
+                        CONF_RUNTIME_MODE, default=DEFAULT_RUNTIME_MODE
+                    ): vol.In([RUNTIME_MODE_LOCAL, RUNTIME_MODE_REMOTE]),
                 }
             ),
             errors=errors,
