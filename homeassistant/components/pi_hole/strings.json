@@ -29,6 +29,19 @@
       }
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pi-hole runtime mode",
+        "data": {
+          "runtime_mode": "Runtime mode"
+        },
+        "data_description": {
+          "runtime_mode": "Choose **local** to run Pi-hole in-process (default), or **remote** to delegate polling to an external process connected via gRPC."
+        }
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "status": {

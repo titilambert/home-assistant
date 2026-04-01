@@ -559,9 +559,20 @@ async def async_from_config_dict(
         return None
 
     # Start the Core gRPC server so remote integrations can connect at any time.
-    from homeassistant.grpc import start_grpc_server
+    from homeassistant.grpc import (
+        CONF_BINDINGS,
+        CONF_PORT,
+        DOMAIN as GRPC_DOMAIN,
+        DEFAULT_PORT,
+        start_grpc_server,
+    )
 
-    hass.data["grpc_server"] = await start_grpc_server(hass)
+    grpc_config = config.get(GRPC_DOMAIN, {})
+    hass.data["grpc_server"] = await start_grpc_server(
+        hass,
+        bindings=grpc_config.get(CONF_BINDINGS),
+        port=grpc_config.get(CONF_PORT, DEFAULT_PORT),
+    )
 
     await _async_set_up_integrations(hass, config)
 

@@ -10,6 +10,7 @@ from hole.exceptions import HoleError
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.const import (
     CONF_API_KEY,
     CONF_HOST,
@@ -64,6 +65,7 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
+    @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> PiHoleOptionsFlowHandler:
         return PiHoleOptionsFlowHandler()
 
