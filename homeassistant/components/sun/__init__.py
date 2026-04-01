@@ -21,9 +21,11 @@ from . import (
     sensor as sensor_pre_import,  # noqa: F401
 )
 from .const import (  # noqa: F401  # noqa: F401
+    CONF_RUNTIME_MODE,
     DOMAIN,
-    STATE_ABOVE_HORIZON,
-    STATE_BELOW_HORIZON,
+    RUNTIME_MODE_REMOTE,
+    STATE_ABOVE_HORIZON,  # noqa: F401
+    STATE_BELOW_HORIZON,  # noqa: F401
 )
 from .entity import Sun, SunConfigEntry
 
@@ -52,6 +54,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: SunConfigEntry) -> bool:
     """Set up from a config entry."""
+    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+        return await _async_setup_remote(hass, entry)
+
     sun = Sun(hass)
     component = EntityComponent[Sun](_LOGGER, DOMAIN, hass)
     await component.async_add_entities([sun])
@@ -61,8 +66,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: SunConfigEntry) -> bool:
     return True
 
 
+async def _async_setup_remote(hass: HomeAssistant, entry: SunConfigEntry) -> bool:
+    """Set up Sun in REMOTE mode.
+
+    The Core gRPC server is already running (started in bootstrap).
+    The remote process (homeassistant.components.sun.remote.main) fetches
+    location config via gRPC, computes solar position with astral, and pushes
+    states back to Core.
+    """
+    _LOGGER.info(
+        "Sun entry configured in REMOTE mode. Start the integration process with:\n"
+        "  python -m homeassistant.components.sun.remote.main"
+    )
+    return True
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: SunConfigEntry) -> bool:
     """Unload a config entry."""
+    if entry.options.get(CONF_RUNTIME_MODE) == RUNTIME_MODE_REMOTE:
+        return True
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         await entry.runtime_data.async_remove()
     return unload_ok

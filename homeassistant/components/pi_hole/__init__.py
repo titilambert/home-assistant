@@ -21,12 +21,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import (
-    CONF_RUNTIME_MODE,
-    CONF_STATISTICS_ONLY,
-    DOMAIN,
-    RUNTIME_MODE_REMOTE,
-)
+from .const import CONF_RUNTIME_MODE, CONF_STATISTICS_ONLY, DOMAIN, RUNTIME_MODE_REMOTE
 from .coordinator import PiHoleConfigEntry, PiHoleData, PiHoleUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -111,20 +106,12 @@ async def _async_setup_remote(
 ) -> bool:
     """Set up Pi-hole in REMOTE mode.
 
-    In this mode HA only runs the Core gRPC server.  The actual polling and
-    entity state management is handled by the external integration process
-    (homeassistant.components.pi_hole.remote.main).  States pushed by that
-    process arrive via gRPC and are written directly into hass.states — they
-    appear in the UI without HA-managed entity objects.
+    The Core gRPC server is already running (started in bootstrap).
+    The actual polling and entity state management is handled by the external
+    integration process (homeassistant.components.pi_hole.remote.main).
+    States pushed by that process arrive via gRPC and are written directly
+    into hass.states — they appear in the UI without HA-managed entity objects.
     """
-    from homeassistant.grpc import start_grpc_server
-
-    # Start the Core gRPC server once per HA instance (shared across entries).
-    if DOMAIN + "_grpc_server" not in hass.data:
-        _LOGGER.info("Starting Core gRPC server (REMOTE mode enabled for %s)", DOMAIN)
-        server = await start_grpc_server(hass)
-        hass.data[DOMAIN + "_grpc_server"] = server
-
     _LOGGER.info(
         "Pi-hole entry %s configured in REMOTE mode. "
         "Start the integration process with:\n"
