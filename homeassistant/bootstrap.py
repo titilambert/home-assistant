@@ -467,6 +467,18 @@ async def async_load_base_functionality(hass: core.HomeAssistant) -> bool:
     template.async_setup(hass)
     translation.async_setup(hass)
 
+    # Horizontal scaling POC: start Core gRPC server early so remote integrations
+    # can connect as soon as config entries are set up.
+    try:
+        from homeassistant.grpc import async_start_grpc_server
+
+        await async_start_grpc_server(hass)
+    except Exception:  # noqa: BLE001
+        _LOGGER.warning(
+            "Failed to start Core gRPC server (horizontal scaling disabled)",
+            exc_info=True,
+        )
+
     recovery = hass.config.recovery_mode
     device_registry.async_setup(hass)
     try:

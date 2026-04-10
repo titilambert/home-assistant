@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package homeassistant.core;
+
+service CoreService {
+  rpc SetState(SetStateRequest) returns (SetStateResponse);
+  rpc GetState(GetStateRequest) returns (GetStateResponse);
+  rpc RegisterService(RegisterServiceRequest) returns (RegisterServiceResponse);
+  rpc CallServiceOnRemote(CallServiceOnRemoteRequest) returns (CallServiceOnRemoteResponse);
+}
+
+message SetStateRequest {
+  string entity_id = 1;
+  string state = 2;
+  map<string, string> attributes = 3;
+}
+
+message SetStateResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message GetStateRequest {
+  string entity_id = 1;
+}
+
+message GetStateResponse {
+  bool found = 1;
+  string entity_id = 2;
+  string state = 3;
+  map<string, string> attributes = 4;
+  int64 last_updated = 5;
+}
+
+message RegisterServiceRequest {
+  string domain = 1;
+  string service = 2;
+  string entry_id = 3;
+}
+
+message RegisterServiceResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message CallServiceOnRemoteRequest {
+  string domain = 1;
+  string service = 2;
+  string entity_id = 3;
+  map<string, string> service_data = 4;
+}
+
+message CallServiceOnRemoteResponse {
+  bool success = 1;
+  string error = 2;
+}

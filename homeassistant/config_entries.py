@@ -766,7 +766,27 @@ class ConfigEntry[_DataT = Any]:
             with async_start_setup(
                 hass, integration=self.domain, group=self.entry_id, phase=setup_phase
             ):
-                result = await component.async_setup_entry(hass, self)
+                runtime_mode = self.options.get("runtime_mode", "local")
+                if runtime_mode == "remote" and domain_is_integration:
+                    _LOGGER.info(
+                        "Starting %s config entry %s in REMOTE mode via ProcessExecutor",
+                        self.domain,
+                        self.entry_id,
+                    )
+                    from homeassistant.executors.process import ProcessExecutor
+
+                    executor = ProcessExecutor()
+                    hass.data.setdefault("remote_executors", {})[self.entry_id] = (
+                        executor
+                    )
+                    await executor.start(
+                        domain=self.domain,
+                        entry_id=self.entry_id,
+                        config=dict(self.data),
+                    )
+                    result = True
+                else:
+                    result = await component.async_setup_entry(hass, self)
 
             if not isinstance(result, bool):
                 _LOGGER.error(  # type: ignore[unreachable]
@@ -1003,7 +1023,21 @@ class ConfigEntry[_DataT = Any]:
         if domain_is_integration:
             self._async_set_state(hass, ConfigEntryState.UNLOAD_IN_PROGRESS, None)
         try:
-            result = await component.async_unload_entry(hass, self)
+            runtime_mode = self.options.get("runtime_mode", "local")
+            if runtime_mode == "remote" and domain_is_integration:
+                executor = hass.data.get("remote_executors", {}).pop(
+                    self.entry_id, None
+                )
+                if executor is not None:
+                    _LOGGER.info(
+                        "Stopping remote ProcessExecutor for %s (%s)",
+                        self.domain,
+                        self.entry_id,
+                    )
+                    await executor.stop()
+                result = True
+            else:
+                result = await component.async_unload_entry(hass, self)
 
             assert isinstance(result, bool)
 
