@@ -30,13 +30,21 @@ async def _main(core_address: str, entry_id: str, config: dict) -> None:
     # (it has complex internals), so we create a lightweight dataclass-style object.
     entry = _MinimalConfigEntry(entry_id=entry_id, config=config)
 
-    # Import the REAL integration setup — UNCHANGED code
+    # Import the REAL integration setup — UNCHANGED code.
+    # The integration module must be imported BEFORE patching its namespace,
+    # so that it is present in sys.modules when patch_integration_namespace()
+    # walks its attributes.
     from homeassistant.components.pi_hole import async_setup_entry
+    from homeassistant.helpers.remote_hass import patch_integration_namespace
+
+    # Fix already-bound references inside pi_hole (e.g. async_get_clientsession
+    # imported at module level via `from ... import async_get_clientsession`).
+    patch_integration_namespace("homeassistant.components.pi_hole")
 
     _LOGGER.info("Calling async_setup_entry for pi_hole...")
     try:
         success = await async_setup_entry(hass, entry)
-    except Exception as exc:
+    except Exception:
         _LOGGER.exception("async_setup_entry raised an exception")
         sys.exit(1)
 
@@ -81,6 +89,22 @@ class _MinimalConfigEntry:
         self.data = config
         self.options: dict = {}
         self.runtime_data = None  # Will be populated by async_setup_entry
+        from homeassistant.config_entries import ConfigEntryState
+
+        self.state = ConfigEntryState.SETUP_IN_PROGRESS
+        self._on_unload: list = []
+
+    def async_on_unload(self, func) -> None:
+        """Register a function to call when the entry is unloaded."""
+        self._on_unload.append(func)
+
+    async def async_unload(self) -> None:
+        """Call all registered unload callbacks."""
+        for func in reversed(self._on_unload):
+            result = func()
+            if hasattr(result, "__await__"):
+                await result
+        self._on_unload.clear()
 
     def __setattr__(self, name: str, value) -> None:
         # Allow runtime_data to be set by the integration
