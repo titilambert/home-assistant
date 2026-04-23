@@ -467,7 +467,7 @@ class HomeAssistantGrpcProxy:
         self.is_stopping = False
         self.loop_thread_id = (
             self.loop._thread_id if hasattr(self.loop, "_thread_id") else 0
-        )  # noqa: SLF001
+        )
         # config_entries needs a reference to hass (self) so it can pass it to platforms
         self.config_entries = _MockConfigEntries(entry_id, self)
 

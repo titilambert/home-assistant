@@ -793,6 +793,110 @@ If POC fails, we re-evaluate the approach before investing more time.
 
 ---
 
+## Worker Générique vs Entry Points Spécifiques
+
+**Decision:** Implémenter un worker générique unique (`homeassistant/worker/main.py`) capable de charger n'importe quelle intégration, plutôt qu'un entry point spécifique par intégration (ex: `pi_hole/remote/main.py`).
+
+**Date:** 2024
+
+**Context:**
+Le POC a prouvé le concept avec `pi_hole/remote/main.py`. Mais cette approche nécessite un fichier `remote/main.py` par intégration, ce qui viole le Zero Code Duplication Principle et rend la migration fastidieuse.
+
+**Alternatives Considered:**
+
+1. **Un `remote/main.py` par intégration** ❌ — duplication, les intégrations doivent être modifiées
+2. **Un worker générique** ✅ — zéro modification des intégrations, un seul runtime à maintenir
+
+**Decision Rationale:**
+
+Le worker générique est la seule approche compatible avec le principe "l'intégration ne sait pas qu'elle est remote". Le `HomeAssistantGrpcProxy` est enrichi pour être suffisamment transparent.
+
+**Consequence:** `pi_hole/remote/main.py` sera supprimé en Phase 1.
+
+---
+
+## Configuration : Pull (Worker demande) vs Push (Core envoie)
+
+**Decision:** Le worker utilise le pattern **Pull** — il se connecte au Core et appelle `GetEntry(entry_id)` pour obtenir sa configuration, plutôt que de recevoir la config en arguments CLI ou via Push du Core.
+
+**Date:** 2024
+
+**Context:**
+Comment le worker reçoit-il la config (`entry.data`, `entry.options`, `domain`) ?
+
+**Alternatives Considered:**
+
+1. **CLI args** (POC actuel) — config passée en JSON sur la ligne de commande. ❌ Insécure (secrets visibles dans `ps`), limité en taille, pas de mise à jour dynamique
+2. **Push (Core → Worker)** — Core envoie `SetupEntry(domain, config)` après le démarrage du worker. ❌ Complexe, nécessite une coordination temporelle
+3. **Pull (Worker → Core)** ✅ — Worker appelle `GetEntry(entry_id)`, Core retourne `{domain, config, options}`. Simple, sécurisé (pas de secrets dans les args), supporte les updates
+
+**Decision Rationale:**
+
+Pull est plus propre — le worker est autonome et sait quoi demander avec juste un `entry_id`. Les secrets ne transitent pas par les arguments de processus.
+
+**Implementation:** Nouveau `rpc GetEntry(GetEntryRequest) returns (GetEntryResponse)` dans le proto. Core stocke les `ConfigEntry` et les sert à la demande.
+
+---
+
+## Stratégie pour les Registres HA (Device, Entity, Issue, Area)
+
+**Decision:** Implémenter des **shims locaux** (mocks légers) pour les registres HA dans le worker, plutôt que de les proxifier entièrement via gRPC.
+
+**Date:** 2024
+
+**Context:**
+Les intégrations utilisent `device_registry`, `entity_registry`, `issue_registry`, `area_registry`. Faut-il les proxifier via gRPC ou les simuler localement ?
+
+**Alternatives Considered:**
+
+1. **Proxy gRPC complet** — chaque appel registry → gRPC vers Core. ❌ Latence élevée, proto complexe, synchronisation bidirectionnelle difficile
+2. **Shims locaux** ✅ — mocks légers qui retournent des valeurs par défaut acceptables. Writes = no-op ou fire-and-forget. Reads = valeurs vides/défaut.
+3. **Sync au démarrage** — Core envoie un snapshot des registries au démarrage du worker. 🟡 Plus complet mais complexe, réservé à une phase future.
+
+**Decision Rationale:**
+
+Pour Phase 1, les shims suffisent. La majorité des intégrations écrivent dans les registres (enregistrement d'entités/devices) mais ne lisent pas en retour de façon critique. Les lectures critiques (ex: `async_entries_for_config_entry`) peuvent retourner des listes vides sans casser le fonctionnement.
+
+**Limit:** Les entités ne seront pas dans l'entity registry HA (pas de gestion UI avancée). Acceptable pour Phase 1, à améliorer en Phase 5 (Complete Core API).
+
+---
+
+## Hardware Local dans les Workers Distants
+
+**Decision:** Les intégrations nécessitant du hardware (Bluetooth, USB, Serial) sont supportées si et seulement si le worker tourne sur une machine disposant de ce hardware.
+
+**Date:** 2024
+
+**Context:**
+L'analyse initiale marquait Bluetooth/USB/Serial comme "impossible" pour les workers distants.
+
+**Clarification:**
+
+Ce n'est pas une limitation du proxy gRPC — c'est une contrainte de topologie. Si le worker tourne sur une machine Raspberry Pi avec un dongle Bluetooth, l'intégration Bluetooth fonctionne normalement. C'est même un cas d'usage primaire : déporter une intégration Bluetooth sur un RPi dans une pièce éloignée.
+
+**Consequence on Architecture:** Aucune — le proxy n'a pas besoin de gérer le hardware. C'est transparent.
+
+---
+
+## Config Flows : Exécution dans le Core uniquement
+
+**Decision:** Les config flows (et option flows) s'exécutent entièrement dans le Core HA, jamais dans le worker.
+
+**Date:** 2024
+
+**Context:**
+Un config flow crée une `ConfigEntry`. Ensuite, `async_setup_entry` est appelé. La question est : où s'exécute le config flow ?
+
+**Decision:**
+
+Le config flow s'exécute dans le Core comme aujourd'hui. Une fois le flow terminé et la `ConfigEntry` créée, la `RuntimeFactory` décide si `async_setup_entry` s'exécute localement (LOCAL) ou déclenche un worker (REMOTE).
+
+**Consequence:** Zéro changement dans les config flows existants. La RuntimeFactory est le seul point d'entrée pour le routing LOCAL/REMOTE.
+
+**Phase:** La gestion des config flows interactifs depuis le worker (ex: reauth) est reportée à une phase future.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -806,5 +910,10 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 7. **Executor abstraction** allows flexibility in deployment models
 8. **Entity mapping** provides clean service call routing
 9. **Minimal POC** proves the concept without over-investing upfront
+10. **Generic worker** eliminates per-integration entry points and upholds the Zero Code Duplication Principle
+11. **Pull-based config** keeps secrets out of process arguments and enables dynamic config updates
+12. **Local registry shims** provide lightweight compatibility for Phase 1 without complex gRPC proxying
+13. **Hardware transparency** — remote workers on hardware-equipped machines support Bluetooth/USB/Serial natively
+14. **Config flows stay in Core** — the RuntimeFactory is the single routing point; flows need zero modification
 
 These decisions can be revisited as we learn more from implementation and production use.

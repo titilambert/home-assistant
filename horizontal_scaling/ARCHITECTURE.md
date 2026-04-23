@@ -39,6 +39,9 @@ The Core always starts a gRPC server on startup (port 50051, localhost by defaul
 - `RegisterDevice(device_id, metadata)` → Register device
 - `UpdateDevice(device_id, updates)` → Update device metadata
 
+**Worker Config:**
+- `GetEntry(entry_id)` → `{domain, config, options}` — Worker demande sa config au Core
+
 **Lifecycle:**
 - `NotifyShutdown()` → Broadcast to all remote integrations
 - `NotifyReload(domain)` → Request integration reload
@@ -95,7 +98,7 @@ async def async_start(hass):
 
 ## Roadmap
 
-### Phase 0: POC (Proof of Concept)
+### Phase 0: POC (Proof of Concept) ✅ COMPLÉTÉ (~2025-06)
 
 **Goal:** Prove the concept with Pi-hole integration
 
@@ -107,21 +110,24 @@ async def async_start(hass):
 
 **Duration:** ~8 hours
 
-**Success criteria:** Pi-hole runs remotely, states sync, commands work
+**Success criteria:** Pi-hole runs remotely, states sync, commands work ✅
 
-### Phase 1: ProcessExecutor + Basic Features
+### Phase 1: Worker Générique + ProcessExecutor
 
-**Goal:** Automate subprocess launch, add Events/Services
+**Goal:** Automate subprocess launch with a generic worker, add Events/Services
 
 **Scope:**
-- ProcessExecutor implementation
-- Core gRPC Server: Add FireEvent, CallService
-- Integration runtime factory in `__init__.py`
+- Worker générique (`homeassistant/worker/`) — runtime universel pour N intégrations sans modification de leur code
+- `GetEntry` gRPC pour récupérer la config d'une intégration depuis le Core
+- Shims manquants : DeviceRegistry, EntityRegistry, IssueRegistry, Dispatcher, Timers, Storage
+- RuntimeFactory dans les intégrations (LOCAL vs REMOTE)
+- ProcessExecutor amélioré (lance le worker générique)
+- Suppression de `pi_hole/remote/main.py` (remplacé par le worker générique)
 - Config flow for runtime mode selection
 
-**Duration:** ~2 days
+**Duration:** ~3 days
 
-**Success criteria:** User can configure Pi-hole in REMOTE mode via UI
+**Success criteria:** Worker générique charge Pi-hole (et toute intégration compatible) sans modifier le code de l'intégration
 
 ### Phase 2: DockerExecutor
 
@@ -215,6 +221,41 @@ async def async_start(hass):
 - **Large deployment (20+ integrations)**: KubernetesWorkerExecutor
 - **Hybrid**: Critical integrations in Dedicated, others in Worker
 
+## Worker Générique
+
+Le worker générique est un **runtime HA universel** capable de charger N intégrations sans modification de leur code source.
+
+### Architecture
+
+```
+homeassistant/worker/
+├── main.py          # Entry point générique
+├── runtime.py       # WorkerRuntime — orchestre les intégrations
+└── loader.py        # IntegrationLoader — charge dynamiquement les intégrations
+```
+
+### Flux de démarrage
+
+1. Core lance le worker avec `--core-address localhost:50051 --entry-id <id1> --entry-id <id2>`
+2. Worker se connecte au Core
+3. Pour chaque `entry_id`, worker appelle `GetEntry(entry_id)` → reçoit `{domain, config, options}`
+4. Worker crée un `HomeAssistantGrpcProxy` partagé
+5. Worker appelle `async_setup_entry(hass_proxy, entry)` pour chaque intégration
+6. Worker démarre son `WorkerGrpcServer` et s'enregistre via `RegisterWorker`
+
+### Multi-intégrations dans un seul worker
+
+- Un seul `HomeAssistantGrpcProxy` partagé entre toutes les intégrations du worker
+- `entry_id` permet de router les `SetState` et `CallService` vers la bonne intégration
+- Chaque intégration a son propre `_MinimalConfigEntry`
+
+### Avantages
+
+- **Zéro modification** des intégrations existantes : le code d'intégration est inchangé
+- **Efficacité** : plusieurs intégrations partagent un seul processus et une seule connexion gRPC
+- **Universalité** : tout domaine chargeable par HA peut tourner dans le worker
+- **Compatibilité** : `HomeAssistantGrpcProxy` simule fidèlement l'API `hass`
+
 ## Integration Compatibility Matrix
 
 | Integration Type | Remote Support | Notes |
@@ -224,9 +265,10 @@ async def async_start(hass):
 | MQTT | ✅ Full | zigbee2mqtt, Tasmota |
 | Webhooks | ✅ With adaptation | Need to expose endpoint |
 | Polling (< 1 Hz) | ✅ Full | Most sensors |
-| USB/Serial | ❌ LOCAL only | ZHA, Z-Wave, RFLink |
-| Bluetooth/BLE | ❌ LOCAL only | Trackers, locks |
+| USB/Serial | ✅/❌ Hardware-dependent | ✅ si hardware disponible sur la machine du worker, ❌ sinon |
+| Bluetooth/BLE | ✅/❌ Hardware-dependent | ✅ si hardware disponible sur la machine du worker (dongle BLE local), ❌ sinon |
 | mDNS/SSDP discovery | ⚠️ With host network | Chromecast, Sonos |
+| Config flows interactifs | ✅ Core only | ✅ Restent dans le Core (inchangés) |
 | High frequency (> 10 Hz) | ❌ LOCAL only | Cameras, audio |
 | Complex state graphs | ⚠️ Requires design | Zigbee coordinator |
 

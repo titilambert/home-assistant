@@ -722,3 +722,158 @@ This POC proves that:
 5. ✅ Service calls (commands) work via gRPC
 
 **The concept is validated. We can proceed with full implementation.**
+
+---
+
+## Phase 0 : Résultats
+
+> **Statut : ✅ COMPLÉTÉ**
+
+### Composants implémentés
+
+#### 1. Core gRPC Server (`homeassistant/grpc/`) — démarre automatiquement au boot de HA
+
+| Méthode | Statut |
+|---|---|
+| `SetState(entity_id, state, attributes, entry_id)` | ✅ |
+| `GetState(entity_id)` | ✅ |
+| `RegisterService(domain, service, entry_id)` | ✅ |
+| `RegisterWorker(entry_id, worker_address)` | ✅ |
+| `CallServiceOnRemote` (stub) | ✅ |
+
+#### 2. Worker gRPC Server (`homeassistant/grpc/worker_server.py`)
+
+| Méthode | Statut |
+|---|---|
+| `CallService(domain, service, entity_id, service_data)` | ✅ |
+
+#### 3. Worker Client (`homeassistant/grpc/worker_client.py`)
+
+| Composant | Statut |
+|---|---|
+| Connexion du Core vers le worker | ✅ |
+
+#### 4. `HomeAssistantGrpcProxy` (`homeassistant/helpers/remote_hass.py`)
+
+| Fonctionnalité | Statut |
+|---|---|
+| `hass.states.async_set` → gRPC SetState | ✅ |
+| `hass.services.async_register` → gRPC RegisterService | ✅ |
+| `hass.config_entries.async_forward_entry_setups` → setup dynamique des platforms | ✅ |
+| Monkey-patches : `er.async_migrate_entries`, `async_get_clientsession` | ✅ |
+| `async_run_hass_job`, `async_add_executor_job`, `async_create_task` | ✅ |
+
+#### 5. ProcessExecutor (`homeassistant/executors/process.py`)
+
+| Composant | Statut |
+|---|---|
+| Lancement subprocess | ✅ |
+
+#### 6. Remote entry point Pi-hole (`homeassistant/components/pi_hole/remote/main.py`)
+
+| Composant | Statut |
+|---|---|
+| Entry point spécifique Pi-hole | ✅ |
+
+#### 7. Service routing Core → Worker
+
+| Fonctionnalité | Statut |
+|---|---|
+| `RegisterService` installe un handler dans `hass.services` qui route vers le worker | ✅ |
+| `switch.turn_on` / `switch.turn_off` routés vers le worker | ✅ |
+| Listener `EVENT_SERVICE_REGISTERED` pour réinstaller le handler si HA le réécrit | ✅ |
+
+### Ce qui fonctionne end-to-end
+
+- Pi-hole tourne dans un subprocess séparé
+- États remontent toutes les 10s via gRPC → visibles dans HA Developer Tools
+- `switch.turn_on` depuis l'UI HA → gRPC → worker → `api.enable()` → Pi-hole activé ✅
+- `switch.turn_off` depuis l'UI HA → gRPC → worker → `api.disable()` → Pi-hole désactivé ✅
+
+---
+
+## Phase 1 : Worker Générique
+
+> **Statut : 🔲 À IMPLÉMENTER**
+
+### Objectif
+
+Remplacer le `pi_hole/remote/main.py` spécifique par un **worker générique** capable de charger n'importe quelle intégration sans modification de son code.
+
+### Principes directeurs
+
+- Le worker reçoit `[(domain, entry_id)]` et contacte le Core pour obtenir la config via gRPC `GetEntry(entry_id)`
+- `HomeAssistantGrpcProxy` est enrichi avec les shims manquants (device registry, dispatcher, timers, storage)
+- Les intégrations **ne savent pas** qu'elles tournent dans un worker distant
+- Config flows restent dans le Core (inchangés) — traités dans une phase ultérieure
+
+### Nouveaux composants à implémenter
+
+#### 1. Worker générique (`homeassistant/worker/main.py`)
+
+- Reçoit `entry_id` en argument
+- Appelle `GetEntry(entry_id)` → reçoit `{domain, config, options}`
+- Charge dynamiquement `homeassistant.components.{domain}`
+- Appelle `async_setup_entry(hass_proxy, entry)`
+- Supporte N intégrations dans le même process
+
+#### 2. Nouveau proto : `GetEntry`
+
+```protobuf
+rpc GetEntry(GetEntryRequest) returns (GetEntryResponse);
+
+message GetEntryRequest {
+  string entry_id = 1;
+}
+
+message GetEntryResponse {
+  string domain  = 1;
+  bytes  config  = 2;  // JSON sérialisé
+  bytes  options = 3;  // JSON sérialisé
+}
+```
+
+#### 3. Shims manquants dans `HomeAssistantGrpcProxy`
+
+| Shim | Description |
+|---|---|
+| `_MockDeviceRegistry` | `async_get_or_create()`, `async_get()` |
+| `_MockEntityRegistry` | `async_entries_for_config_entry()` → `[]` (complet) |
+| `_MockIssueRegistry` | no-op |
+| Dispatcher local | `async_dispatcher_connect` / `async_dispatcher_send` |
+| `async_track_time_interval` | wrapper asyncio |
+| `async_call_later` | `loop.call_later` |
+| `helpers.storage.Store` | mock |
+
+#### 4. RuntimeFactory dans les intégrations
+
+- Logique LOCAL vs REMOTE dans `async_setup_entry`
+- Déclenchement du `ProcessExecutor` en mode REMOTE
+
+#### 5. ProcessExecutor amélioré
+
+- Lance le worker générique au lieu d'un entrypoint spécifique
+- Passe uniquement `entry_id` + `core_address`
+
+### Flux cible (Phase 1)
+
+```
+HA Core boots
+  └─► ProcessExecutor.start(entry_id="pihole_xxx", core="localhost:50051")
+        └─► worker/main.py --entry-id pihole_xxx --core localhost:50051
+              ├─► gRPC GetEntry("pihole_xxx")
+              │     └─► Core répond: {domain="pi_hole", config={...}, options={...}}
+              ├─► import homeassistant.components.pi_hole
+              ├─► async_setup_entry(hass_proxy, entry)
+              └─► WorkerGrpcServer.start(port=50052)
+                    └─► RegisterWorker("pihole_xxx", "localhost:50052") → Core
+```
+
+### Ce qui reste hors scope Phase 1
+
+| Fonctionnalité | Phase prévue |
+|---|---|
+| Config flow interactif côté worker | Phase future |
+| DockerExecutor / KubernetesExecutor | Phase 2+ |
+| UI de gestion des workers | Phase future |
+| Reconnexion automatique | Phase future |
