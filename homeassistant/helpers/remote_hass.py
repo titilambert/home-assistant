@@ -169,8 +169,9 @@ class _MockBus:
 class StatesProxy:
     """Proxy for hass.states — forwards async_set to Core via gRPC."""
 
-    def __init__(self, stub: Any) -> None:
+    def __init__(self, stub: Any, entry_id: str = "") -> None:
         self._stub = stub
+        self._entry_id = entry_id
 
     def async_set(
         self,
@@ -193,6 +194,7 @@ class StatesProxy:
                     entity_id=entity_id,
                     state=new_state,
                     attributes={k: str(v) for k, v in attributes.items()},
+                    entry_id=self._entry_id,
                 )
             )
             _LOGGER.debug("(proxy) SetState OK: %s = %s", entity_id, new_state)
@@ -220,6 +222,9 @@ class ServicesProxy:
         schema: Any = None,
     ) -> None:
         """Register a service handler locally and notify Core."""
+        _LOGGER.info(
+            "(proxy) ServicesProxy.async_register called: %s.%s", domain, service
+        )
         self._handlers[(domain, service)] = service_func
         asyncio.create_task(self._notify_core(domain, service))
 
@@ -297,19 +302,23 @@ class _MockConfigEntries:
                 continue
 
             # Build a custom async_add_entities that wires each entity to gRPC
+            # platform_name = "switch", "sensor", etc.  (the HA domain of the entity)
+            # integration_name = "pi_hole"              (the integration domain)
             def _make_add_entities(
-                hass: Any, domain: str, platform_name_local: str
+                hass: Any, platform_name_local: str, integration_name: str
             ) -> Any:
                 def async_add_entities(
                     entities: list, update_before_add: bool = False
                 ) -> None:
                     for entity in entities:
-                        _setup_entity(hass, entity, domain, platform_name_local)
+                        _setup_entity(
+                            hass, entity, platform_name_local, integration_name
+                        )
 
                 return async_add_entities
 
             def _setup_entity(
-                hass: Any, entity: Any, domain: str, platform_name_local: str
+                hass: Any, entity: Any, platform_name_local: str, integration_name: str
             ) -> None:
                 """Attach hass to entity and subscribe to coordinator updates."""
                 from homeassistant.helpers.entity import EntityPlatformState
@@ -317,11 +326,13 @@ class _MockConfigEntries:
 
                 entity.hass = hass
 
-                # Attach minimal PlatformData so translation_key lookups work
+                # Attach minimal PlatformData so translation_key lookups work.
+                # domain = platform ("switch", "sensor", …)
+                # platform_name = integration ("pi_hole")
                 entity.platform_data = PlatformData(
                     hass,
-                    domain=domain,
-                    platform_name=platform_name_local,
+                    domain=platform_name_local,
+                    platform_name=integration_name,
                 )
 
                 # Mark the entity as fully added to a platform so that
@@ -331,7 +342,8 @@ class _MockConfigEntries:
                 # Mark entity as state-writable (bypasses internal HA checks)
                 entity._verified_state_writable = True  # noqa: SLF001
 
-                # Build a stable entity_id from domain + sanitised unique_id
+                # Build a stable entity_id: {platform}.{sanitised_unique_id}
+                # e.g. switch.pi_hole_abc123_switch
                 if (
                     not getattr(entity, "entity_id", None)
                     or entity.entity_id == "unknown.unknown"
@@ -341,10 +353,34 @@ class _MockConfigEntries:
                     import re
 
                     safe_uid = re.sub(r"[^a-z0-9]+", "_", unique_id.lower()).strip("_")
-                    entity.entity_id = f"{domain}.{safe_uid}"
+                    entity.entity_id = f"{platform_name_local}.{safe_uid}"
 
                 # Initial state push
                 _push_state(hass, entity)
+
+                # Register turn_on/turn_off as service handlers if the entity supports them.
+                # We call hass.services.async_register so that ServicesProxy notifies
+                # the Core via gRPC RegisterService — which is what triggers the Core
+                # to install a routing handler for switch.turn_on / switch.turn_off.
+                if hasattr(entity, "async_turn_on"):
+                    _e_on = entity
+
+                    def _turn_on_handler(call: Any, e: Any = _e_on) -> Any:
+                        return e.async_turn_on()
+
+                    hass.services.async_register(
+                        platform_name_local, "turn_on", _turn_on_handler
+                    )
+
+                if hasattr(entity, "async_turn_off"):
+                    _e_off = entity
+
+                    def _turn_off_handler(call: Any, e: Any = _e_off) -> Any:
+                        return e.async_turn_off()
+
+                    hass.services.async_register(
+                        platform_name_local, "turn_off", _turn_off_handler
+                    )
 
                 # Subscribe to coordinator updates
                 coordinator = getattr(entity, "coordinator", None)
@@ -385,7 +421,8 @@ class _MockConfigEntries:
                 await platform_module.async_setup_entry(
                     self._hass,
                     entry,
-                    _make_add_entities(self._hass, domain, platform_name),
+                    # platform_name = "switch"/"sensor"/… , domain = "pi_hole"
+                    _make_add_entities(self._hass, platform_name, domain),
                 )
                 _LOGGER.debug("(proxy) Platform %s set up successfully", platform_name)
             except Exception as err:  # noqa: BLE001
@@ -421,12 +458,16 @@ class HomeAssistantGrpcProxy:
         self._channel = grpc.aio.insecure_channel(core_address)
         self._stub = core_pb2_grpc.CoreServiceStub(self._channel)
 
-        self.states = StatesProxy(self._stub)
+        self.states = StatesProxy(self._stub, entry_id)
         self.services = ServicesProxy(self._stub, entry_id)
         self.bus = _MockBus()
         self.config = _MockConfig()
         self.data: dict[str, Any] = {}
         self.loop = asyncio.get_event_loop()
+        self.is_stopping = False
+        self.loop_thread_id = (
+            self.loop._thread_id if hasattr(self.loop, "_thread_id") else 0
+        )  # noqa: SLF001
         # config_entries needs a reference to hass (self) so it can pass it to platforms
         self.config_entries = _MockConfigEntries(entry_id, self)
 
@@ -440,6 +481,20 @@ class HomeAssistantGrpcProxy:
         """Run a blocking function in a thread-pool executor."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, func, *args)
+
+    def async_run_hass_job(
+        self, hassjob: Any, *args: Any, background: bool = False
+    ) -> Any:
+        """Run a HassJob from within the event loop."""
+        from homeassistant.core import HassJobType
+
+        if hassjob.job_type is HassJobType.Coroutinefunction:
+            return asyncio.ensure_future(hassjob.target(*args))
+        if hassjob.job_type is HassJobType.Callback:
+            return hassjob.target(*args)
+        return asyncio.ensure_future(
+            asyncio.get_event_loop().run_in_executor(None, hassjob.target, *args)
+        )
 
     async def close(self) -> None:
         """Close the gRPC channel and any open aiohttp sessions."""

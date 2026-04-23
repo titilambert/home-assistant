@@ -7,12 +7,18 @@ service CoreService {
   rpc GetState(GetStateRequest) returns (GetStateResponse);
   rpc RegisterService(RegisterServiceRequest) returns (RegisterServiceResponse);
   rpc CallServiceOnRemote(CallServiceOnRemoteRequest) returns (CallServiceOnRemoteResponse);
+  rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+}
+
+service WorkerService {
+  rpc CallService(WorkerCallServiceRequest) returns (WorkerCallServiceResponse);
 }
 
 message SetStateRequest {
   string entity_id = 1;
   string state = 2;
   map<string, string> attributes = 3;
+  string entry_id = 4;
 }
 
 message SetStateResponse {
@@ -51,6 +57,28 @@ message CallServiceOnRemoteRequest {
 }
 
 message CallServiceOnRemoteResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message RegisterWorkerRequest {
+  string entry_id = 1;
+  string worker_address = 2;
+}
+
+message RegisterWorkerResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message WorkerCallServiceRequest {
+  string domain = 1;
+  string service = 2;
+  string entity_id = 3;
+  map<string, string> service_data = 4;
+}
+
+message WorkerCallServiceResponse {
   bool success = 1;
   string error = 2;
 }
