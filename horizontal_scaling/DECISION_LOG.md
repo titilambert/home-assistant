@@ -793,107 +793,169 @@ If POC fails, we re-evaluate the approach before investing more time.
 
 ---
 
-## Worker Générique vs Entry Points Spécifiques
+## Generic Worker vs Specific Entry Points
 
-**Decision:** Implémenter un worker générique unique (`homeassistant/worker/main.py`) capable de charger n'importe quelle intégration, plutôt qu'un entry point spécifique par intégration (ex: `pi_hole/remote/main.py`).
+**Decision:** Implement a single generic worker (`homeassistant/worker/main.py`) capable of loading any integration, rather than a specific entry point per integration (e.g. `pi_hole/remote/main.py`).
 
 **Date:** 2024
 
 **Context:**
-Le POC a prouvé le concept avec `pi_hole/remote/main.py`. Mais cette approche nécessite un fichier `remote/main.py` par intégration, ce qui viole le Zero Code Duplication Principle et rend la migration fastidieuse.
+The POC proved the concept with `pi_hole/remote/main.py`. But this approach requires a `remote/main.py` file per integration, which violates the Zero Code Duplication Principle and makes migration tedious.
 
 **Alternatives Considered:**
 
-1. **Un `remote/main.py` par intégration** ❌ — duplication, les intégrations doivent être modifiées
-2. **Un worker générique** ✅ — zéro modification des intégrations, un seul runtime à maintenir
+1. **One `remote/main.py` per integration** ❌ — duplication, integrations must be modified
+2. **A generic worker** ✅ — zero modification of integrations, a single runtime to maintain
 
 **Decision Rationale:**
 
-Le worker générique est la seule approche compatible avec le principe "l'intégration ne sait pas qu'elle est remote". Le `HomeAssistantGrpcProxy` est enrichi pour être suffisamment transparent.
+The generic worker is the only approach compatible with the principle "the integration does not know it is remote". The `HomeAssistantGrpcProxy` is enriched to be sufficiently transparent.
 
-**Consequence:** `pi_hole/remote/main.py` sera supprimé en Phase 1.
+**Consequence:** `pi_hole/remote/main.py` will be removed in Phase 1.
 
 ---
 
-## Configuration : Pull (Worker demande) vs Push (Core envoie)
+## Configuration: Pull (Worker requests) vs Push (Core sends)
 
-**Decision:** Le worker utilise le pattern **Pull** — il se connecte au Core et appelle `GetEntry(entry_id)` pour obtenir sa configuration, plutôt que de recevoir la config en arguments CLI ou via Push du Core.
+**Decision:** The worker uses the **Pull** pattern — it connects to the Core and calls `GetEntry(entry_id)` to obtain its configuration, rather than receiving the config via CLI arguments or via Push from the Core.
 
 **Date:** 2024
 
 **Context:**
-Comment le worker reçoit-il la config (`entry.data`, `entry.options`, `domain`) ?
+How does the worker receive the config (`entry.data`, `entry.options`, `domain`)?
 
 **Alternatives Considered:**
 
-1. **CLI args** (POC actuel) — config passée en JSON sur la ligne de commande. ❌ Insécure (secrets visibles dans `ps`), limité en taille, pas de mise à jour dynamique
-2. **Push (Core → Worker)** — Core envoie `SetupEntry(domain, config)` après le démarrage du worker. ❌ Complexe, nécessite une coordination temporelle
-3. **Pull (Worker → Core)** ✅ — Worker appelle `GetEntry(entry_id)`, Core retourne `{domain, config, options}`. Simple, sécurisé (pas de secrets dans les args), supporte les updates
+1. **CLI args** (current POC) — config passed as JSON on the command line. ❌ Insecure (secrets visible in `ps`), limited in size, no dynamic updates
+2. **Push (Core → Worker)** — Core sends `SetupEntry(domain, config)` after the worker starts. ❌ Complex, requires temporal coordination
+3. **Pull (Worker → Core)** ✅ — Worker calls `GetEntry(entry_id)`, Core returns `{domain, config, options}`. Simple, secure (no secrets in args), supports updates
 
 **Decision Rationale:**
 
-Pull est plus propre — le worker est autonome et sait quoi demander avec juste un `entry_id`. Les secrets ne transitent pas par les arguments de processus.
+Pull is cleaner — the worker is autonomous and knows what to ask for with just an `entry_id`. Secrets do not pass through process arguments.
 
-**Implementation:** Nouveau `rpc GetEntry(GetEntryRequest) returns (GetEntryResponse)` dans le proto. Core stocke les `ConfigEntry` et les sert à la demande.
+**Implementation:** New `rpc GetEntry(GetEntryRequest) returns (GetEntryResponse)` in the proto. Core stores the `ConfigEntry` objects and serves them on demand.
 
 ---
 
-## Stratégie pour les Registres HA (Device, Entity, Issue, Area)
+## Strategy for HA Registries (Device, Entity, Issue, Area)
 
-**Decision:** Implémenter des **shims locaux** (mocks légers) pour les registres HA dans le worker, plutôt que de les proxifier entièrement via gRPC.
+**Decision:** Implement **local shims** (lightweight mocks) for HA registries in the worker, rather than fully proxying them via gRPC.
 
 **Date:** 2024
 
 **Context:**
-Les intégrations utilisent `device_registry`, `entity_registry`, `issue_registry`, `area_registry`. Faut-il les proxifier via gRPC ou les simuler localement ?
+Integrations use `device_registry`, `entity_registry`, `issue_registry`, `area_registry`. Should these be proxied via gRPC or simulated locally?
 
 **Alternatives Considered:**
 
-1. **Proxy gRPC complet** — chaque appel registry → gRPC vers Core. ❌ Latence élevée, proto complexe, synchronisation bidirectionnelle difficile
-2. **Shims locaux** ✅ — mocks légers qui retournent des valeurs par défaut acceptables. Writes = no-op ou fire-and-forget. Reads = valeurs vides/défaut.
-3. **Sync au démarrage** — Core envoie un snapshot des registries au démarrage du worker. 🟡 Plus complet mais complexe, réservé à une phase future.
+1. **Full gRPC proxy** — each registry call → gRPC to Core. ❌ High latency, complex proto, difficult bidirectional synchronization
+2. **Local shims** ✅ — lightweight mocks that return acceptable default values. Writes = no-op or fire-and-forget. Reads = empty/default values.
+3. **Sync on startup** — Core sends a snapshot of the registries when the worker starts. 🟡 More complete but complex, reserved for a future phase.
 
 **Decision Rationale:**
 
-Pour Phase 1, les shims suffisent. La majorité des intégrations écrivent dans les registres (enregistrement d'entités/devices) mais ne lisent pas en retour de façon critique. Les lectures critiques (ex: `async_entries_for_config_entry`) peuvent retourner des listes vides sans casser le fonctionnement.
+For Phase 1, shims are sufficient. The majority of integrations write to registries (registering entities/devices) but do not read back critically. Critical reads (e.g. `async_entries_for_config_entry`) can return empty lists without breaking functionality.
 
-**Limit:** Les entités ne seront pas dans l'entity registry HA (pas de gestion UI avancée). Acceptable pour Phase 1, à améliorer en Phase 5 (Complete Core API).
+**Limit:** Entities will not be in the HA entity registry (no advanced UI management). Acceptable for Phase 1, to be improved in Phase 5 (Complete Core API).
 
 ---
 
-## Hardware Local dans les Workers Distants
+## Local Hardware in Remote Workers
 
-**Decision:** Les intégrations nécessitant du hardware (Bluetooth, USB, Serial) sont supportées si et seulement si le worker tourne sur une machine disposant de ce hardware.
+**Decision:** Integrations requiring hardware (Bluetooth, USB, Serial) are supported if and only if the worker runs on a machine that has that hardware.
 
 **Date:** 2024
 
 **Context:**
-L'analyse initiale marquait Bluetooth/USB/Serial comme "impossible" pour les workers distants.
+The initial analysis marked Bluetooth/USB/Serial as "impossible" for remote workers.
 
 **Clarification:**
 
-Ce n'est pas une limitation du proxy gRPC — c'est une contrainte de topologie. Si le worker tourne sur une machine Raspberry Pi avec un dongle Bluetooth, l'intégration Bluetooth fonctionne normalement. C'est même un cas d'usage primaire : déporter une intégration Bluetooth sur un RPi dans une pièce éloignée.
+This is not a limitation of the gRPC proxy — it is a topology constraint. If the worker runs on a Raspberry Pi machine with a Bluetooth dongle, the Bluetooth integration works normally. This is even a primary use case: offloading a Bluetooth integration to a RPi in a remote room.
 
-**Consequence on Architecture:** Aucune — le proxy n'a pas besoin de gérer le hardware. C'est transparent.
+**Consequence on Architecture:** None — the proxy does not need to handle hardware. It is transparent.
 
 ---
 
-## Config Flows : Exécution dans le Core uniquement
+## Config Flows: Execution in Core Only
 
-**Decision:** Les config flows (et option flows) s'exécutent entièrement dans le Core HA, jamais dans le worker.
+**Decision:** Config flows (and option flows) run entirely in HA Core, never in the worker.
 
 **Date:** 2024
 
 **Context:**
-Un config flow crée une `ConfigEntry`. Ensuite, `async_setup_entry` est appelé. La question est : où s'exécute le config flow ?
+A config flow creates a `ConfigEntry`. Then `async_setup_entry` is called. The question is: where does the config flow run?
 
 **Decision:**
 
-Le config flow s'exécute dans le Core comme aujourd'hui. Une fois le flow terminé et la `ConfigEntry` créée, la `RuntimeFactory` décide si `async_setup_entry` s'exécute localement (LOCAL) ou déclenche un worker (REMOTE).
+The config flow runs in the Core as it does today. Once the flow is complete and the `ConfigEntry` is created, the `RuntimeFactory` decides whether `async_setup_entry` runs locally (LOCAL) or triggers a worker (REMOTE).
 
-**Consequence:** Zéro changement dans les config flows existants. La RuntimeFactory est le seul point d'entrée pour le routing LOCAL/REMOTE.
+**Consequence:** Zero changes to existing config flows. The RuntimeFactory is the single routing point for LOCAL/REMOTE.
 
-**Phase:** La gestion des config flows interactifs depuis le worker (ex: reauth) est reportée à une phase future.
+**Phase:** Handling interactive config flows from the worker (e.g. reauth) is deferred to a future phase.
+
+---
+
+## Support for Custom Integrations — ComponentResolver
+
+**Decision:** The worker supports custom integrations (HACS, GitHub) via a `ComponentResolver` that downloads and installs the integration locally in the worker.
+
+**Context:** In normal HA, custom integrations are in `/config/custom_components/`. A remote worker does not have access to this folder.
+
+**Alternatives Considered:**
+
+1. **Filesystem sharing** (NFS/shared volume) — Simple but tightly coupled, does not work for K8s or remote workers.
+
+2. **Pull from Core via gRPC** (`GetCustomComponent(domain)` → source code) — Complex, questionable security (executing code received over the network).
+
+3. **ComponentResolver with GitHub/HACS source** ✅ — The Core sends the `source` in `GetEntry`. The worker downloads and installs locally. Compatible with all executor phases.
+
+4. **Pre-built Docker image** — Good for DockerExecutor/K8s but does not solve the ProcessExecutor case and requires a rebuild on every update.
+
+**Decision Rationale:**
+- The Core is the source of truth on the origin of an integration (it installed it)
+- GitHub/HACS are already the canonical source for custom components
+- The `ComponentResolver` is naturally compatible with HACS (which uses GitHub)
+- Versioning (`@tag`, `@commit`) guarantees reproducibility between Core and worker
+- The local cache avoids re-downloads on every worker restart
+
+**Source of Truth:** The Core sends `source` in `GetEntryResponse`. The worker never decides where an integration comes from.
+
+**Implementation:** New phase 7, `homeassistant/worker/resolver.py`.
+
+---
+
+## Multiple Integrations from Phase 1
+
+**Decision:** Multi-integration support in a single worker is implemented from Phase 1 (generic worker) onwards, not deferred to Phase 4.
+
+**Context:** Phase 4 (KubernetesWorkerExecutor) initially had in its scope "Worker Pod implementation (multi-tenant gRPC server)". This implied that multi-integration support would be a Phase 4 feature.
+
+**Correction:** The Phase 1 generic worker natively supports multiple integrations — it receives a list of `entry_id` values and loads each integration independently with its own `_MinimalConfigEntry`. The `HomeAssistantGrpcProxy` is shared across all integrations in the same worker.
+
+**Consequence:**
+- Phase 1: multi-integration generic worker ✅
+- Phase 4: Kubernetes orchestration only (pool management, routing, auto-scaling)
+
+---
+
+## KubernetesDedicatedExecutor Removed — Merged into KubernetesExecutor
+
+**Decision:** Remove `KubernetesDedicatedExecutor` as a separate phase/executor. A single `KubernetesExecutor` with a `max_integrations_per_worker` parameter covers both use cases.
+
+**Context:** The initial architecture had two separate Kubernetes executors:
+- `KubernetesDedicatedExecutor` — one pod per integration (maximum isolation)
+- `KubernetesWorkerExecutor` — multiple integrations per pod (maximum efficiency)
+
+**Problem:** This distinction is artificial. The generic worker (Phase 1) already supports multiple integrations natively. A dedicated pod per integration is just a worker with `max_integrations_per_worker=1`.
+
+**Decision:** A single `KubernetesExecutor` with:
+- `max_integrations_per_worker: 1` → "dedicated" behavior (maximum isolation)
+- `max_integrations_per_worker: N` → "worker pool" behavior (maximum efficiency)
+- `max_integrations_per_worker: 0` → unlimited (default)
+
+**Consequence:** Roadmap simplified from 8 phases to 7 phases. Less code to maintain.
 
 ---
 
@@ -915,5 +977,8 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 12. **Local registry shims** provide lightweight compatibility for Phase 1 without complex gRPC proxying
 13. **Hardware transparency** — remote workers on hardware-equipped machines support Bluetooth/USB/Serial natively
 14. **Config flows stay in Core** — the RuntimeFactory is the single routing point; flows need zero modification
+15. **ComponentResolver** — workers download and install custom integrations (HACS/GitHub) locally; the Core is the single source of truth for integration origin via the `source` field in `GetEntryResponse`
+16. **Multi-integration support in Phase 1** — the generic worker natively supports multiple integrations in a single process; Phase 4 (KubernetesWorkerExecutor) only adds the Kubernetes orchestration layer (pool management, routing, auto-scaling) on top
+17. **KubernetesExecutor unified** — a single `KubernetesExecutor` with `max_integrations_per_worker` replaces the former `KubernetesDedicatedExecutor` and `KubernetesWorkerExecutor`; dedicated pod behavior is just `max_integrations_per_worker=1`, simplifying the roadmap from 8 to 7 phases
 
 These decisions can be revisited as we learn more from implementation and production use.

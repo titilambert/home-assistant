@@ -40,7 +40,7 @@ The Core always starts a gRPC server on startup (port 50051, localhost by defaul
 - `UpdateDevice(device_id, updates)` → Update device metadata
 
 **Worker Config:**
-- `GetEntry(entry_id)` → `{domain, config, options}` — Worker demande sa config au Core
+- `GetEntry(entry_id)` → `{domain, config, options}` — Worker requests its config from the Core
 
 **Lifecycle:**
 - `NotifyShutdown()` → Broadcast to all remote integrations
@@ -98,7 +98,7 @@ async def async_start(hass):
 
 ## Roadmap
 
-### Phase 0: POC (Proof of Concept) ✅ COMPLÉTÉ (~2025-06)
+### Phase 0: POC (Proof of Concept) ✅ COMPLETED (~2025-06)
 
 **Goal:** Prove the concept with Pi-hole integration
 
@@ -112,22 +112,26 @@ async def async_start(hass):
 
 **Success criteria:** Pi-hole runs remotely, states sync, commands work ✅
 
-### Phase 1: Worker Générique + ProcessExecutor
+### Phase 1: Generic Worker + ProcessExecutor
 
 **Goal:** Automate subprocess launch with a generic worker, add Events/Services
 
 **Scope:**
-- Worker générique (`homeassistant/worker/`) — runtime universel pour N intégrations sans modification de leur code
-- `GetEntry` gRPC pour récupérer la config d'une intégration depuis le Core
-- Shims manquants : DeviceRegistry, EntityRegistry, IssueRegistry, Dispatcher, Timers, Storage
-- RuntimeFactory dans les intégrations (LOCAL vs REMOTE)
-- ProcessExecutor amélioré (lance le worker générique)
-- Suppression de `pi_hole/remote/main.py` (remplacé par le worker générique)
+- Generic worker (`homeassistant/worker/`) — universal runtime for N integrations without modifying their code
+- **Generic worker supports multiple integrations in a single process**
+- **Worker receives a list of entry_ids and loads each integration dynamically**
+- `GetEntry` gRPC to retrieve an integration's config from the Core
+- Missing shims: DeviceRegistry, EntityRegistry, IssueRegistry, Dispatcher, Timers, Storage
+- RuntimeFactory in integrations (LOCAL vs REMOTE)
+- Improved ProcessExecutor (launches the generic worker)
+- Removal of `pi_hole/remote/main.py` (replaced by the generic worker)
 - Config flow for runtime mode selection
+- Config flow LOCAL/REMOTE mode selection in the UI
+- Integration setup UI: choose executor (process, docker, kubernetes)
 
 **Duration:** ~3 days
 
-**Success criteria:** Worker générique charge Pi-hole (et toute intégration compatible) sans modifier le code de l'intégration
+**Success criteria:** Generic worker loads Pi-hole (and any compatible integration) without modifying the integration code
 
 ### Phase 2: DockerExecutor
 
@@ -143,37 +147,48 @@ async def async_start(hass):
 
 **Success criteria:** Pi-hole runs in Docker container with resource limits
 
-### Phase 3: KubernetesDedicatedExecutor
+### Phase 3: KubernetesExecutor
 
-**Goal:** Production-ready orchestration with maximum isolation
+**Goal:** Deploy workers on Kubernetes with pool management
 
 **Scope:**
-- KubernetesDedicatedExecutor implementation
+- KubernetesExecutor implementation (replaces KubernetesDedicatedExecutor + KubernetesWorkerExecutor)
+- Worker Pod pool management (discovery, capacity tracking)
+- Routing logic: Core assigns entry_ids to the least-loaded worker pod
+- Worker auto-scaling (HPA based on number of integrations)
+- Configuration: max_integrations_per_worker (default: unlimited, set to 1 for dedicated mode)
 - Pod/Service manifest templates
 - Health checks and probes
-- Helm chart (optional)
+
+**Note:** A "dedicated" pod per integration is just a special case: set max_integrations_per_worker: 1 in the executor config. No separate executor needed.
+
+**Duration:** ~4 days
+
+**Success criteria:**
+- Multiple integrations run in worker pods on Kubernetes
+- Core automatically assigns integrations to the least-loaded pod
+- Pods auto-scale when capacity is reached
+- max_integrations_per_worker=1 gives dedicated pod behavior
+
+### Phase 4: UI Dashboard Workers
+
+**Goal:** Give users visibility and control over remote workers from the HA UI
+
+**Scope:**
+- Workers dashboard panel (list of active workers, status, health)
+- Per-worker detail: integrations running, uptime, gRPC latency, last seen
+- Worker actions: restart, stop, reassign integration to different worker
+- Integration status: LOCAL vs REMOTE badge in the integrations list
+- Notifications: worker disconnected, integration crashed in worker
+- Config entry UI: show which worker is running this integration
 
 **Duration:** ~3 days
 
-**Success criteria:** Pi-hole runs as K8s Pod, auto-restarts on failure
-
-### Phase 4: KubernetesWorkerExecutor
-
-**Goal:** Resource-efficient multi-tenant workers
-
-**Scope:**
-- Worker Pod implementation (multi-tenant gRPC server)
-- KubernetesWorkerExecutor implementation
-- Worker discovery and selection logic
-- Worker auto-scaling (optional)
-- Worker management UI
-
-**Duration:** ~5 days
-
-**Success criteria:** 
-- Multiple integrations run in single Worker Pod
-- Core can route calls by integration_id
-- Worker scales when capacity reached
+**Success criteria:**
+- User can see all active workers and their integrations in the HA UI
+- User can restart a worker from the UI
+- Integrations list shows LOCAL/REMOTE status for each integration
+- User is notified when a worker goes offline
 
 ### Phase 5: Complete Core API
 
@@ -205,56 +220,129 @@ async def async_start(hass):
 
 **Success criteria:** Any developer can migrate an integration in < 1 day
 
+### Phase 7: Custom Components Support (HACS + GitHub)
+
+**Goal:** Support custom integrations in workers
+
+**Scope:**
+- ComponentResolver implementation (`homeassistant/worker/resolver.py`)
+- GetEntry proto: add `source` field
+- HACS index resolver (hacs/default → GitHub URL)
+- GitHub downloader (zip download + extraction)
+- Local cache management
+- Version pinning (@tag, @commit, @branch)
+
+**Duration:** ~2 days
+
+**Success criteria:** 
+- A HACS integration runs in a worker without being installed on the Core machine
+- Version is pinned and reproducible
+- Cache prevents re-download on worker restart
+
 ## Executor Comparison Matrix
 
 | Executor | Isolation | Resource Overhead | Use Case | Complexity |
 |----------|-----------|-------------------|----------|------------|
 | **ProcessExecutor** | Medium | Low (subprocess) | Development, debugging | Low |
 | **DockerExecutor** | High | Medium (container) | Production, isolation | Medium |
-| **KubernetesDedicatedExecutor** | Maximum | High (pod per integration) | Mission-critical, full isolation | High |
-| **KubernetesWorkerExecutor** | Low | Very Low (shared pod) | Many integrations, cost optimization | High |
+| **KubernetesExecutor** | High to Maximum | Low to High (configurable) | Production at scale, max_integrations_per_worker configurable | High |
+
+> KubernetesExecutor covers both "dedicated" (max_integrations_per_worker=1) and "worker pool" (max_integrations_per_worker=N) deployment models.
 
 **Recommended strategies:**
 
 - **Small deployment (1-5 integrations)**: ProcessExecutor or DockerExecutor
-- **Medium deployment (5-20 integrations)**: KubernetesDedicatedExecutor
-- **Large deployment (20+ integrations)**: KubernetesWorkerExecutor
-- **Hybrid**: Critical integrations in Dedicated, others in Worker
+- **Production deployment**: KubernetesExecutor with max_integrations_per_worker=N
+- **Maximum isolation**: KubernetesExecutor with max_integrations_per_worker=1
 
-## Worker Générique
+## Generic Worker
 
-Le worker générique est un **runtime HA universel** capable de charger N intégrations sans modification de leur code source.
+The generic worker is a **universal HA runtime** capable of loading N integrations without modifying their source code.
 
 ### Architecture
 
 ```
 homeassistant/worker/
-├── main.py          # Entry point générique
-├── runtime.py       # WorkerRuntime — orchestre les intégrations
-└── loader.py        # IntegrationLoader — charge dynamiquement les intégrations
+├── main.py          # Generic entry point
+├── runtime.py       # WorkerRuntime — orchestrates integrations
+└── loader.py        # IntegrationLoader — dynamically loads integrations
 ```
 
-### Flux de démarrage
+### Startup Flow
 
-1. Core lance le worker avec `--core-address localhost:50051 --entry-id <id1> --entry-id <id2>`
-2. Worker se connecte au Core
-3. Pour chaque `entry_id`, worker appelle `GetEntry(entry_id)` → reçoit `{domain, config, options}`
-4. Worker crée un `HomeAssistantGrpcProxy` partagé
-5. Worker appelle `async_setup_entry(hass_proxy, entry)` pour chaque intégration
-6. Worker démarre son `WorkerGrpcServer` et s'enregistre via `RegisterWorker`
+1. Core launches the worker with `--core-address localhost:50051 --entry-id <id1> --entry-id <id2>`
+2. Worker connects to Core
+3. For each `entry_id`, worker calls `GetEntry(entry_id)` → receives `{domain, config, options}`
+4. Worker creates a shared `HomeAssistantGrpcProxy`
+5. Worker calls `async_setup_entry(hass_proxy, entry)` for each integration
+6. Worker starts its `WorkerGrpcServer` and registers via `RegisterWorker`
 
-### Multi-intégrations dans un seul worker
+### Multiple Integrations in a Single Worker
 
-- Un seul `HomeAssistantGrpcProxy` partagé entre toutes les intégrations du worker
-- `entry_id` permet de router les `SetState` et `CallService` vers la bonne intégration
-- Chaque intégration a son propre `_MinimalConfigEntry`
+- A single shared `HomeAssistantGrpcProxy` across all integrations in the worker
+- `entry_id` is used to route `SetState` and `CallService` to the correct integration
+- Each integration has its own `_MinimalConfigEntry`
 
-### Avantages
+### Advantages
 
-- **Zéro modification** des intégrations existantes : le code d'intégration est inchangé
-- **Efficacité** : plusieurs intégrations partagent un seul processus et une seule connexion gRPC
-- **Universalité** : tout domaine chargeable par HA peut tourner dans le worker
-- **Compatibilité** : `HomeAssistantGrpcProxy` simule fidèlement l'API `hass`
+- **Zero modification** of existing integrations: integration code is unchanged
+- **Efficiency**: multiple integrations share a single process and a single gRPC connection
+- **Universality**: any domain loadable by HA can run in the worker
+- **Compatibility**: `HomeAssistantGrpcProxy` faithfully simulates the `hass` API
+
+## Component Resolver
+
+### Objective
+The generic worker must be able to load any integration, whether built-in to HA or custom (HACS, GitHub).
+
+### Integration Source
+The Core sends the `source` in `GetEntryResponse`:
+
+```protobuf
+message GetEntryResponse {
+  string domain = 1;
+  map<string, string> config = 2;
+  map<string, string> options = 3;
+  string source = 4;  // "builtin", "github:user/repo@v1.2.3", "hacs:domain"
+}
+```
+
+### Supported Source Types
+
+| Source | Format | Example |
+|--------|---------|---------|
+| Built-in HA | `builtin` | `builtin` |
+| GitHub direct | `github:user/repo@ref` | `github:custom-components/pi_hole@v1.2.3` |
+| GitHub (branch) | `github:user/repo@branch` | `github:user/repo@main` |
+| HACS | `hacs:domain` | `hacs:pi_hole` |
+
+### HACS → GitHub Resolution
+HACS maintains a public index on GitHub (`hacs/default`). The resolver consults this index to resolve `hacs:domain` → corresponding GitHub URL, then proceeds as for a GitHub source.
+
+```
+ComponentResolver.resolve(domain, source)
+  ├─> "builtin"      → import homeassistant.components.{domain}
+  ├─> "github:..."   → downloads the zip, extracts into local sys.path
+  └─> "hacs:..."     → resolves via hacs/default index → same as github
+```
+
+### Implementation in the Worker
+
+```
+homeassistant/worker/
+├── main.py
+├── runtime.py
+├── loader.py
+└── resolver.py      # ComponentResolver — nouveau
+```
+
+`ComponentResolver`:
+- Local cache in the worker's `config_dir` to avoid re-downloads
+- Verifies hash/tag for reproducibility
+- Offline support if already cached
+
+### Who Knows the Source?
+The Core is the source of truth — it knows where the integration comes from (installed via HACS, manually, or built-in). It sends it to the worker via `GetEntry`.
 
 ## Integration Compatibility Matrix
 
@@ -265,10 +353,10 @@ homeassistant/worker/
 | MQTT | ✅ Full | zigbee2mqtt, Tasmota |
 | Webhooks | ✅ With adaptation | Need to expose endpoint |
 | Polling (< 1 Hz) | ✅ Full | Most sensors |
-| USB/Serial | ✅/❌ Hardware-dependent | ✅ si hardware disponible sur la machine du worker, ❌ sinon |
-| Bluetooth/BLE | ✅/❌ Hardware-dependent | ✅ si hardware disponible sur la machine du worker (dongle BLE local), ❌ sinon |
+| USB/Serial | ✅/❌ Hardware-dependent | ✅ if hardware available on the worker machine, ❌ otherwise |
+| Bluetooth/BLE | ✅/❌ Hardware-dependent | ✅ if hardware available on the worker machine (local BLE dongle), ❌ otherwise |
 | mDNS/SSDP discovery | ⚠️ With host network | Chromecast, Sonos |
-| Config flows interactifs | ✅ Core only | ✅ Restent dans le Core (inchangés) |
+| Interactive config flows | ✅ Core only | ✅ Stay in Core (unchanged) |
 | High frequency (> 10 Hz) | ❌ LOCAL only | Cameras, audio |
 | Complex state graphs | ⚠️ Requires design | Zigbee coordinator |
 
