@@ -67,6 +67,12 @@ class CoreServiceStub:
             response_deserializer=core__pb2.RegisterWorkerResponse.FromString,
             _registered_method=True,
         )
+        self.GetEntry = channel.unary_unary(
+            "/homeassistant.core.CoreService/GetEntry",
+            request_serializer=core__pb2.GetEntryRequest.SerializeToString,
+            response_deserializer=core__pb2.GetEntryResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class CoreServiceServicer:
@@ -102,6 +108,12 @@ class CoreServiceServicer:
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def GetEntry(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_CoreServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -129,6 +141,11 @@ def add_CoreServiceServicer_to_server(servicer, server):
             servicer.RegisterWorker,
             request_deserializer=core__pb2.RegisterWorkerRequest.FromString,
             response_serializer=core__pb2.RegisterWorkerResponse.SerializeToString,
+        ),
+        "GetEntry": grpc.unary_unary_rpc_method_handler(
+            servicer.GetEntry,
+            request_deserializer=core__pb2.GetEntryRequest.FromString,
+            response_serializer=core__pb2.GetEntryResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -283,6 +300,36 @@ class CoreService:
             "/homeassistant.core.CoreService/RegisterWorker",
             core__pb2.RegisterWorkerRequest.SerializeToString,
             core__pb2.RegisterWorkerResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def GetEntry(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/homeassistant.core.CoreService/GetEntry",
+            core__pb2.GetEntryRequest.SerializeToString,
+            core__pb2.GetEntryResponse.FromString,
             options,
             channel_credentials,
             insecure,

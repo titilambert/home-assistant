@@ -1,9 +1,8 @@
-"""ProcessExecutor: runs an integration as a subprocess."""
+"""ProcessExecutor: runs integrations as a subprocess using the generic worker."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import sys
 
@@ -13,61 +12,60 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ProcessExecutor(ExecutorBase):
-    """Executes an integration in a separate Python subprocess."""
+    """Executes integrations in a separate Python subprocess using the generic worker."""
 
     def __init__(self) -> None:
-        """Initialize the ProcessExecutor."""
         self._process: asyncio.subprocess.Process | None = None
-        self._domain: str | None = None
+        self._entry_ids: list[str] = []
         self._stdout_task: asyncio.Task | None = None
         self._stderr_task: asyncio.Task | None = None
 
     async def start(
         self,
-        domain: str,
-        entry_id: str,
-        config: dict,
+        entry_ids: list[str],
         core_address: str = "localhost:50051",
+        worker_port: int = 50052,
+        **kwargs,
     ) -> None:
-        """Start integration in subprocess."""
-        self._domain = domain
-        cmd = [
-            sys.executable,
-            "-m",
-            f"homeassistant.components.{domain}.remote.main",
-            "--core-address",
-            core_address,
-            "--entry-id",
-            entry_id,
-            "--config",
-            json.dumps(config),
-        ]
-        _LOGGER.info("Starting remote integration %s: %s", domain, " ".join(cmd))
+        """Start the generic worker subprocess for the given entry_ids."""
+        self._entry_ids = entry_ids
+        cmd = [sys.executable, "-m", "homeassistant.worker.main"]
+        cmd += ["--core-address", core_address]
+        cmd += ["--worker-port", str(worker_port)]
+        for entry_id in entry_ids:
+            cmd += ["--entry-id", entry_id]
+
+        _LOGGER.info(
+            "Starting generic worker for entries %s: %s",
+            entry_ids,
+            " ".join(cmd),
+        )
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        # Stream subprocess logs
         self._stdout_task = asyncio.create_task(
-            self._stream_output(self._process.stdout, f"[{domain}/stdout]")
+            self._stream_output(self._process.stdout, "[worker/stdout]")
         )
         self._stderr_task = asyncio.create_task(
-            self._stream_output(self._process.stderr, f"[{domain}/stderr]")
+            self._stream_output(self._process.stderr, "[worker/stderr]")
         )
         _LOGGER.info(
-            "Remote integration %s started (pid=%s)", domain, self._process.pid
+            "Generic worker started (pid=%s) for entries %s",
+            self._process.pid,
+            entry_ids,
         )
 
     async def stop(self) -> None:
-        """Stop the subprocess."""
+        """Stop the worker subprocess."""
         if self._process is not None:
-            _LOGGER.info("Stopping remote integration %s", self._domain)
+            _LOGGER.info("Stopping generic worker (entries=%s)", self._entry_ids)
             self._process.terminate()
             try:
                 await asyncio.wait_for(self._process.wait(), timeout=10)
             except TimeoutError:
-                _LOGGER.warning("Force-killing remote integration %s", self._domain)
+                _LOGGER.warning("Force-killing generic worker")
                 self._process.kill()
             self._process = None
         for task in (self._stdout_task, self._stderr_task):
@@ -76,8 +74,7 @@ class ProcessExecutor(ExecutorBase):
 
     @staticmethod
     async def _stream_output(stream, prefix: str) -> None:
-        """Read and log subprocess output line by line."""
         if stream is None:
             return
         async for line in stream:
-            _LOGGER.debug("%s %s", prefix, line.decode().rstrip())
+            _LOGGER.info("%s %s", prefix, line.decode().rstrip())

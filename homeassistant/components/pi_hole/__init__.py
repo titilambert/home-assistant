@@ -37,6 +37,22 @@ PLATFORMS = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bool:
     """Set up Pi-hole entry."""
+    # Horizontal scaling: check if this entry should run in a remote worker
+    from homeassistant.helpers.runtime_factory import (
+        async_setup_remote,
+        is_remote,
+        set_runtime_mode,
+    )
+
+    from .const import CONF_RUNTIME_MODE, RUNTIME_MODE_REMOTE  # noqa: F401
+
+    # Sync runtime mode from entry.data to hass.data
+    runtime_mode = entry.data.get(CONF_RUNTIME_MODE, "local")
+    set_runtime_mode(hass, entry.entry_id, runtime_mode)
+
+    if is_remote(hass, entry):
+        return await async_setup_remote(hass, entry)
+
     host = entry.data[CONF_HOST]
 
     # remove obsolet CONF_STATISTICS_ONLY from entry.data
@@ -79,9 +95,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
 
     await er.async_migrate_entries(hass, entry.entry_id, update_unique_id)
 
-    _LOGGER.debug("Determining Pi-hole API version for %s", host)
-    version = await determine_api_version(hass, dict(entry.data))
-    _LOGGER.debug("Pi-hole API version determined: %s", version)
+    # Use cached API version from config flow if available to avoid a second
+    # authentication request that could trigger Pi-hole's rate-limiter.
+    if "api_version" in entry.data:
+        version = entry.data["api_version"]
+        _LOGGER.debug("Using cached Pi-hole API version %s for %s", version, host)
+    else:
+        _LOGGER.debug("Determining Pi-hole API version for %s", host)
+        version = await determine_api_version(hass, dict(entry.data))
+        _LOGGER.debug("Pi-hole API version determined: %s", version)
 
     # Once API version 5 is deprecated we should instantiate Hole directly
     api = api_by_version(hass, dict(entry.data), version)
@@ -99,6 +121,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload Pi-hole entry."""
+    from homeassistant.helpers.runtime_factory import async_teardown_remote, is_remote
+
+    if is_remote(hass, entry):
+        # In REMOTE mode the platforms run inside the worker process, not in Core.
+        # Calling async_unload_platforms here would fail because the EntityComponents
+        # for binary_sensor/sensor/switch/update were never registered in Core.
+        # The ProcessExecutor is stopped via the async_on_unload callback registered
+        # in async_setup_remote(), so we just need to clean up the executor reference.
+        result = await async_teardown_remote(hass, entry)
+
+        # Remove all states that were pushed by the remote worker so they don't
+        # linger in the UI after the integration is removed.
+        import homeassistant.helpers.entity_registry as er_module
+
+        entity_registry = er_module.async_get(hass)
+        remote_entities = er_module.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
+        )
+        for er_entry in remote_entities:
+            hass.states.async_remove(er_entry.entity_id)
+
+        return result
+
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

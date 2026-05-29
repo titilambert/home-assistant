@@ -16,6 +16,16 @@
         "description": "Please enter a new API key for Pi-hole at {host}/{location}",
         "title": "Reauthenticate Pi-hole"
       },
+      "runtime": {
+        "data": {
+          "runtime_mode": "Runtime Mode"
+        },
+        "data_description": {
+          "runtime_mode": "**local**: Run in Home Assistant Core (default)\n**remote**: Run in a separate worker process (horizontal scaling)"
+        },
+        "description": "Choose where to run the Pi-hole integration",
+        "title": "Runtime Mode"
+      },
       "user": {
         "data": {
           "api_key": "App password or API key",

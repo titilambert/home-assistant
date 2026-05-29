@@ -22,11 +22,14 @@ from homeassistant.const import (
 
 from . import Hole, api_by_version, determine_api_version
 from .const import (
+    CONF_RUNTIME_MODE,
     DEFAULT_LOCATION,
     DEFAULT_NAME,
     DEFAULT_SSL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    RUNTIME_MODE_LOCAL,
+    RUNTIME_MODE_REMOTE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +43,7 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._config: dict = {}
+        self._runtime_mode: str = RUNTIME_MODE_LOCAL
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -56,6 +60,10 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                 CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
                 CONF_API_KEY: user_input[CONF_API_KEY],
             }
+            # _api_version is set by _async_try_connect and stored in entry.data
+            # so the worker can skip determine_api_version() and avoid a
+            # second authentication that would trigger Pi-hole's rate-limiter.
+            self._api_version: int | None = None
 
             self._async_abort_entries_match(
                 {
@@ -65,9 +73,9 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
             )
 
             if not (errors := await self._async_try_connect()):
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME], data=self._config
-                )
+                if self._api_version is not None:
+                    self._config["api_version"] = self._api_version
+                return await self.async_step_runtime()
 
         user_input = user_input or {}
         return self.async_show_form(
@@ -100,6 +108,31 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    async def async_step_runtime(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask the user whether to run this integration locally or in a remote worker."""
+        if user_input is not None:
+            self._runtime_mode = user_input[CONF_RUNTIME_MODE]
+            data = {**self._config, CONF_RUNTIME_MODE: self._runtime_mode}
+            return self.async_create_entry(title=self._config[CONF_NAME], data=data)
+
+        return self.async_show_form(
+            step_id="runtime",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_RUNTIME_MODE,
+                        default=RUNTIME_MODE_LOCAL,
+                    ): vol.In([RUNTIME_MODE_LOCAL, RUNTIME_MODE_REMOTE]),
+                }
+            ),
+            description_placeholders={
+                "local_description": "Run in Home Assistant Core (default)",
+                "remote_description": "Run in a separate worker process",
+            },
         )
 
     async def async_step_reauth(
@@ -136,6 +169,7 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
         """Try to connect to the Pi-hole API and determine the version."""
         try:
             version = await determine_api_version(hass=self.hass, entry=self._config)
+            self._api_version = version
         except HoleError:
             return {"base": "cannot_connect"}
         pi_hole: Hole = api_by_version(self.hass, self._config, version)

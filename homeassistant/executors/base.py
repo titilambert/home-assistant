@@ -9,9 +9,14 @@ class ExecutorBase(ABC):
     """Abstract base class for integration executors."""
 
     @abstractmethod
-    async def start(self, domain: str, entry_id: str, config: dict) -> None:
-        """Start the integration in the executor."""
+    async def start(
+        self,
+        entry_ids: list[str],
+        core_address: str = "localhost:50051",
+        **kwargs,
+    ) -> None:
+        """Start the integration(s) in the executor."""
 
     @abstractmethod
     async def stop(self) -> None:
-        """Stop the integration."""
+        """Stop the integration(s)."""

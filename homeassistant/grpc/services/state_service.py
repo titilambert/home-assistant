@@ -122,27 +122,224 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
 
         Besides updating hass.states, we record the entity_id -> entry_id
         mapping so that the remote service router can find the right worker.
+
+        The worker may inject well-known ``_ha_*`` meta-attributes that are
+        consumed here and stripped before the state is stored:
+
+        * ``_ha_friendly_name``  – stored as ``friendly_name`` in the state
+          attributes so the UI shows a human-readable label.
+        * ``_ha_unique_id``      – registered in the entity registry so HA
+          can track the entity across restarts and show it in the UI.
+        * ``_ha_device_info``    – JSON-encoded device info dict used to
+          create / update the device registry entry and link the entity to
+          its device.
         """
+        import json
+
         entity_id: str = request.entity_id
         entry_id: str = request.entry_id  # may be empty for legacy callers
+
+        raw_attrs: dict[str, str] = dict(request.attributes)
 
         _LOGGER.debug(
             "gRPC SetState: %s = %s (attrs: %s, entry_id: %s)",
             entity_id,
             request.state,
-            dict(request.attributes),
+            raw_attrs,
             entry_id,
         )
+
+        # ------------------------------------------------------------------
+        # Extract and consume _ha_* meta-attributes injected by the worker.
+        # ------------------------------------------------------------------
+        ha_friendly_name: str | None = raw_attrs.pop("_ha_friendly_name", None)
+        ha_unique_id: str | None = raw_attrs.pop("_ha_unique_id", None)
+        ha_device_info_json: str | None = raw_attrs.pop("_ha_device_info", None)
+
+        # ------------------------------------------------------------------
+        # Step 1 — Register unique_id in the entity registry FIRST so that
+        # the canonical entity_id is known before we push to hass.states.
+        # This prevents HA from appending _2 when the entity_id already
+        # exists in hass.states but not yet in the registry.
+        # ------------------------------------------------------------------
+        if ha_unique_id:
+            try:
+                import homeassistant.helpers.entity_registry as er_module
+
+                entity_registry = er_module.async_get(self.hass)
+                domain = (
+                    entity_id.split(".", maxsplit=1)[0]
+                    if "." in entity_id
+                    else entity_id
+                )
+
+                platform_name = ""
+                if entry_id:
+                    entry = self.hass.config_entries.async_get_entry(entry_id)
+                    if entry is not None:
+                        platform_name = entry.domain
+
+                if platform_name:
+                    existing = entity_registry.async_get_entity_id(
+                        domain, platform_name, ha_unique_id
+                    )
+                    if existing is None:
+                        er_entry = entity_registry.async_get_or_create(
+                            domain=domain,
+                            platform=platform_name,
+                            unique_id=ha_unique_id,
+                            suggested_object_id=entity_id.split(".", 1)[-1],
+                            config_entry=self.hass.config_entries.async_get_entry(
+                                entry_id
+                            )
+                            if entry_id
+                            else None,
+                            original_name=ha_friendly_name,
+                            has_entity_name=True,
+                        )
+                        _LOGGER.debug(
+                            "gRPC SetState: registered unique_id=%s for %s (platform=%s)",
+                            ha_unique_id,
+                            entity_id,
+                            platform_name,
+                        )
+                        # Use the registry entity_id as canonical
+                        if er_entry.entity_id != entity_id:
+                            _LOGGER.debug(
+                                "gRPC SetState: remapping entity_id %s → %s",
+                                entity_id,
+                                er_entry.entity_id,
+                            )
+                            entity_id = er_entry.entity_id
+                    # Already registered — use the registry entity_id
+                    elif existing != entity_id:
+                        _LOGGER.debug(
+                            "gRPC SetState: remapping entity_id %s → %s (existing registry entry)",
+                            entity_id,
+                            existing,
+                        )
+                        entity_id = existing
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "gRPC SetState: could not register unique_id for %s: %s",
+                    entity_id,
+                    err,
+                )
+
+        # ------------------------------------------------------------------
+        # Step 2 — Push state to hass.states using the canonical entity_id.
+        # ------------------------------------------------------------------
+        # Build the final attribute dict that will be stored in hass.states.
+        # We promote friendly_name to a real state attribute (HA convention).
+        final_attrs: dict[str, str] = raw_attrs
+        if ha_friendly_name:
+            final_attrs["friendly_name"] = ha_friendly_name
 
         self.hass.states.async_set(
             entity_id,
             request.state,
-            dict(request.attributes),
+            final_attrs,
         )
 
         # Track which worker owns this entity so the service router can find it.
         if entry_id:
             self._entity_entry_map()[entity_id] = entry_id
+
+        # ------------------------------------------------------------------
+        # Problem 3 — register / update device entry and link entity to it.
+        # ------------------------------------------------------------------
+        if ha_device_info_json:
+            try:
+                device_info_dict = json.loads(ha_device_info_json)
+
+                import homeassistant.helpers.device_registry as dr_module
+
+                device_registry = dr_module.async_get(self.hass)
+
+                # Re-construct identifiers: stored as [[domain, id], …]
+                raw_identifiers = device_info_dict.get("identifiers", [])
+                identifiers: set[tuple[str, str]] = {
+                    tuple(item)
+                    for item in raw_identifiers  # type: ignore[misc]
+                }
+
+                if identifiers:
+                    device_entry = device_registry.async_get_or_create(
+                        config_entry_id=entry_id or "",
+                        identifiers=identifiers,
+                        name=device_info_dict.get("name"),
+                        manufacturer=device_info_dict.get("manufacturer"),
+                        model=device_info_dict.get("model"),
+                        configuration_url=device_info_dict.get("configuration_url"),
+                        sw_version=device_info_dict.get("sw_version"),
+                        hw_version=device_info_dict.get("hw_version"),
+                    )
+                    _LOGGER.debug(
+                        "gRPC SetState: device entry id=%s for %s",
+                        device_entry.id,
+                        entity_id,
+                    )
+
+                    # Link entity to device in the entity registry if we have
+                    # both a unique_id and a valid device entry.
+                    if ha_unique_id and entry_id:
+                        try:
+                            import homeassistant.helpers.entity_registry as er_module
+
+                            entity_registry = er_module.async_get(self.hass)
+                            domain = (
+                                entity_id.split(".")[0]
+                                if "." in entity_id
+                                else entity_id
+                            )
+                            entry = self.hass.config_entries.async_get_entry(entry_id)
+                            platform_name = entry.domain if entry is not None else ""
+                            if platform_name:
+                                er_entry = entity_registry.async_get(entity_id)
+                                if er_entry is not None:
+                                    if er_entry.device_id != device_entry.id:
+                                        entity_registry.async_update_entity(
+                                            entity_id, device_id=device_entry.id
+                                        )
+                                        _LOGGER.debug(
+                                            "gRPC SetState: linked %s to device %s",
+                                            entity_id,
+                                            device_entry.id,
+                                        )
+                                else:
+                                    # Entity not yet in registry — create it with
+                                    # device_id set from the start so the link is
+                                    # established on first SetState.
+                                    entry_obj = (
+                                        self.hass.config_entries.async_get_entry(
+                                            entry_id
+                                        )
+                                    )
+                                    entity_registry.async_get_or_create(
+                                        domain=domain,
+                                        platform=platform_name,
+                                        unique_id=ha_unique_id,
+                                        suggested_object_id=entity_id.split(".", 1)[-1],
+                                        config_entry=entry_obj,
+                                        device_id=device_entry.id,
+                                    )
+                                    _LOGGER.debug(
+                                        "gRPC SetState: created registry entry for %s linked to device %s",
+                                        entity_id,
+                                        device_entry.id,
+                                    )
+                        except Exception as err:  # noqa: BLE001
+                            _LOGGER.debug(
+                                "gRPC SetState: could not link entity to device for %s: %s",
+                                entity_id,
+                                err,
+                            )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "gRPC SetState: could not process device_info for %s: %s",
+                    entity_id,
+                    err,
+                )
 
         return core_pb2.SetStateResponse(success=True)
 
@@ -272,6 +469,47 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
             request.entity_id,
         )
         return core_pb2.CallServiceOnRemoteResponse(success=True)
+
+    async def GetEntry(self, request, context):
+        """Return a config entry's domain, config and options to a remote worker."""
+        import json
+        import os
+
+        entry_id = request.entry_id
+        if not entry_id:
+            return core_pb2.GetEntryResponse(found=False)
+
+        # Look up the config entry in hass.config_entries
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+        if entry is None:
+            _LOGGER.warning("GetEntry: entry_id=%s not found", entry_id)
+            return core_pb2.GetEntryResponse(found=False)
+
+        # Determine the source of the integration
+        # For now, all built-in integrations are "builtin"
+        # Custom components will be handled in Phase 7
+        source = "builtin"
+        custom_components_path = (
+            self.hass.config.config_dir + "/custom_components/" + entry.domain
+        )
+        if os.path.isdir(custom_components_path):
+            source = f"local:{entry.domain}"
+
+        _LOGGER.info(
+            "GetEntry: serving entry_id=%s domain=%s source=%s",
+            entry_id,
+            entry.domain,
+            source,
+        )
+
+        return core_pb2.GetEntryResponse(
+            found=True,
+            domain=entry.domain,
+            config=json.dumps(dict(entry.data)).encode(),
+            options=json.dumps(dict(entry.options)).encode(),
+            title=entry.title,
+            source=source,
+        )
 
     async def RegisterWorker(self, request, context):
         """Register a remote worker and store its gRPC client in hass.data."""

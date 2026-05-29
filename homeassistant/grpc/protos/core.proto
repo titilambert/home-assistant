@@ -8,6 +8,7 @@ service CoreService {
   rpc RegisterService(RegisterServiceRequest) returns (RegisterServiceResponse);
   rpc CallServiceOnRemote(CallServiceOnRemoteRequest) returns (CallServiceOnRemoteResponse);
   rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+  rpc GetEntry(GetEntryRequest) returns (GetEntryResponse);
 }
 
 service WorkerService {
@@ -69,6 +70,19 @@ message RegisterWorkerRequest {
 message RegisterWorkerResponse {
   bool success = 1;
   string error = 2;
+}
+
+message GetEntryRequest {
+  string entry_id = 1;
+}
+
+message GetEntryResponse {
+  bool found = 1;
+  string domain = 2;
+  bytes config = 3;   // JSON-serialized entry.data
+  bytes options = 4;  // JSON-serialized entry.options
+  string title = 5;
+  string source = 6;  // "builtin", "github:user/repo@ref", "hacs:domain"
 }
 
 message WorkerCallServiceRequest {

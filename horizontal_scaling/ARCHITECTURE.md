@@ -133,7 +133,37 @@ async def async_start(hass):
 
 **Success criteria:** Generic worker loads Pi-hole (and any compatible integration) without modifying the integration code
 
-### Phase 2: DockerExecutor
+### Phase 2: Worker Configuration
+
+**Goal:** Allow users to declare workers in configuration.yaml and assign integrations to them via the config flow UI
+
+**Scope:**
+- New `horizontal_scaling:` component in HA reading `configuration.yaml`
+- Worker declaration schema validation (process, docker, remote, kubernetes types)
+- Worker registry in `hass.data` — tracks declared workers, their status and capacity
+- Worker lifecycle management at HA startup/shutdown per type:
+  - `process`: launch subprocess at startup, kill at shutdown
+  - `docker`: stop existing + create new container at startup, stop at shutdown
+  - `remote`: connect only at startup, nothing at shutdown
+  - `kubernetes`: delete existing + create new Pod+Service at startup, delete at shutdown
+- Config flow update: if workers declared → show worker selection dropdown instead of just LOCAL/REMOTE
+- Config flow: validate worker is reachable before creating entry (show error if not)
+- Config flow: show worker as unavailable in dropdown if at capacity (max_integrations reached)
+- Worker status monitoring: retry connection on failure, log errors
+- RBAC permission check at startup for kubernetes workers (SelfSubjectAccessReview)
+- Full configuration reference documented in `horizontal_scaling/WORKERS.md`
+
+**Duration:** ~4 days
+
+**Success criteria:**
+- User declares workers in configuration.yaml
+- Config flow shows available workers in a dropdown
+- Integration is assigned to a worker and starts correctly
+- Worker at capacity is shown as unavailable in the dropdown
+- Remote worker unavailable at config flow time shows a clear error message
+- HA startup/shutdown correctly manages worker lifecycle per type
+
+### Phase 4: DockerExecutor
 
 **Goal:** Container isolation
 
@@ -147,7 +177,7 @@ async def async_start(hass):
 
 **Success criteria:** Pi-hole runs in Docker container with resource limits
 
-### Phase 3: KubernetesExecutor
+### Phase 5: KubernetesExecutor
 
 **Goal:** Deploy workers on Kubernetes with pool management
 
@@ -170,7 +200,7 @@ async def async_start(hass):
 - Pods auto-scale when capacity is reached
 - max_integrations_per_worker=1 gives dedicated pod behavior
 
-### Phase 4: UI Dashboard Workers
+### Phase 6: UI Dashboard Workers
 
 **Goal:** Give users visibility and control over remote workers from the HA UI
 
@@ -190,7 +220,7 @@ async def async_start(hass):
 - Integrations list shows LOCAL/REMOTE status for each integration
 - User is notified when a worker goes offline
 
-### Phase 5: Complete Core API
+### Phase 3: Complete Core API
 
 **Goal:** Support all hass.* APIs
 
@@ -205,7 +235,7 @@ async def async_start(hass):
 
 **Success criteria:** Complex integrations can be migrated
 
-### Phase 6: Generalization + Tooling
+### Phase 7: Generalization + Tooling
 
 **Goal:** Make migration easy for all integrations
 
@@ -220,7 +250,7 @@ async def async_start(hass):
 
 **Success criteria:** Any developer can migrate an integration in < 1 day
 
-### Phase 7: Custom Components Support (HACS + GitHub)
+### Phase 8: Custom Components Support (HACS + GitHub)
 
 **Goal:** Support custom integrations in workers
 

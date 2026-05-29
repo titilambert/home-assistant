@@ -13,6 +13,16 @@ This document records the key architectural and technical decisions made for the
 7. [Executor Abstraction](#executor-abstraction)
 8. [Service Call Routing](#service-call-routing)
 9. [POC Scope](#poc-scope)
+10. [Generic Worker vs Specific Entry Points](#generic-worker-vs-specific-entry-points)
+11. [Configuration: Pull (Worker requests) vs Push (Core sends)](#configuration-pull-worker-requests-vs-push-core-sends)
+12. [Strategy for HA Registries (Device, Entity, Issue, Area)](#strategy-for-ha-registries-device-entity-issue-area)
+13. [Local Hardware in Remote Workers](#local-hardware-in-remote-workers)
+14. [Config Flows: Execution in Core Only](#config-flows-execution-in-core-only)
+15. [Support for Custom Integrations — ComponentResolver](#support-for-custom-integrations--componentresolver)
+16. [Multiple Integrations from Phase 1](#multiple-integrations-from-phase-1)
+17. [KubernetesDedicatedExecutor Removed — Merged into KubernetesExecutor](#kubernetesdedicatedexecutor-removed--merged-into-kubernetesexecutor)
+18. [Worker Configuration as a Dedicated Phase](#worker-configuration-as-a-dedicated-phase)
+19. [Summary](#summary)
 
 ---
 
@@ -667,9 +677,8 @@ message CallServiceRequest {
 - This is acceptable because it provides flexibility where needed
 
 **Phasing:**
-- Phase 3: Implement KubernetesDedicatedExecutor (simpler)
-- Phase 4: Implement KubernetesWorkerExecutor (more complex)
-- Users can start with Dedicated, migrate to Worker when they have many integrations
+- Phase 5: Implement KubernetesExecutor (unified — replaces former KubernetesDedicatedExecutor + KubernetesWorkerExecutor)
+- Users choose `max_integrations_per_worker=1` for dedicated behavior or `N` for worker pool behavior
 
 ---
 
@@ -857,7 +866,7 @@ Integrations use `device_registry`, `entity_registry`, `issue_registry`, `area_r
 
 For Phase 1, shims are sufficient. The majority of integrations write to registries (registering entities/devices) but do not read back critically. Critical reads (e.g. `async_entries_for_config_entry`) can return empty lists without breaking functionality.
 
-**Limit:** Entities will not be in the HA entity registry (no advanced UI management). Acceptable for Phase 1, to be improved in Phase 5 (Complete Core API).
+**Limit:** Entities will not be in the HA entity registry (no advanced UI management). Acceptable for Phase 1, to be improved in Phase 3 (Complete Core API).
 
 ---
 
@@ -928,15 +937,15 @@ The config flow runs in the Core as it does today. Once the flow is complete and
 
 ## Multiple Integrations from Phase 1
 
-**Decision:** Multi-integration support in a single worker is implemented from Phase 1 (generic worker) onwards, not deferred to Phase 4.
+**Decision:** Multi-integration support in a single worker is implemented from Phase 1 (generic worker) onwards, not deferred to Phase 5.
 
-**Context:** Phase 4 (KubernetesWorkerExecutor) initially had in its scope "Worker Pod implementation (multi-tenant gRPC server)". This implied that multi-integration support would be a Phase 4 feature.
+**Context:** Phase 5 (KubernetesExecutor) initially had in its scope "Worker Pod implementation (multi-tenant gRPC server)". This implied that multi-integration support would be a Phase 5 feature.
 
 **Correction:** The Phase 1 generic worker natively supports multiple integrations — it receives a list of `entry_id` values and loads each integration independently with its own `_MinimalConfigEntry`. The `HomeAssistantGrpcProxy` is shared across all integrations in the same worker.
 
 **Consequence:**
 - Phase 1: multi-integration generic worker ✅
-- Phase 4: Kubernetes orchestration only (pool management, routing, auto-scaling)
+- Phase 5: Kubernetes orchestration only (pool management, routing, auto-scaling)
 
 ---
 
@@ -959,6 +968,34 @@ The config flow runs in the Core as it does today. Once the flow is complete and
 
 ---
 
+## Worker Configuration as a Dedicated Phase
+
+**Decision:** Worker declaration in `configuration.yaml` is a dedicated phase (Phase 2) between the Generic Worker (Phase 1) and the DockerExecutor (Phase 4).
+
+**Context:** After Phase 1, workers are launched implicitly (one subprocess per integration). Users have no way to declare persistent workers, assign multiple integrations to them, or configure Docker/Kubernetes workers.
+
+**What this phase adds:**
+- Explicit worker declaration in `configuration.yaml`
+- Four worker types: `process`, `docker`, `remote`, `kubernetes`
+- Worker lifecycle management (startup/shutdown per type)
+- Config flow integration: worker selection dropdown
+- Capacity management (`max_integrations`)
+- RBAC validation for Kubernetes workers
+
+**Key decisions:**
+- `process` workers: permanent subprocess started at HA startup (not on-demand per integration)
+- `docker` workers: always recreated at startup (stop existing + create new) — no state reuse
+- `remote` workers: HA only connects, never manages lifecycle
+- `kubernetes` workers: in-cluster only (ClusterIP Service), always recreated at startup
+- Docker `worker_address` auto-deduced from `host` IP + `port`
+- Kubernetes `worker_address` auto-deduced as ClusterIP Service DNS name
+- If no workers declared: config flow offers LOCAL only (no change to existing behavior)
+- Worker unavailable at config flow time: show error, block entry creation
+
+**Reference:** See `horizontal_scaling/WORKERS.md` for full configuration documentation.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -978,7 +1015,7 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 13. **Hardware transparency** — remote workers on hardware-equipped machines support Bluetooth/USB/Serial natively
 14. **Config flows stay in Core** — the RuntimeFactory is the single routing point; flows need zero modification
 15. **ComponentResolver** — workers download and install custom integrations (HACS/GitHub) locally; the Core is the single source of truth for integration origin via the `source` field in `GetEntryResponse`
-16. **Multi-integration support in Phase 1** — the generic worker natively supports multiple integrations in a single process; Phase 4 (KubernetesWorkerExecutor) only adds the Kubernetes orchestration layer (pool management, routing, auto-scaling) on top
+16. **Multi-integration support in Phase 1** — the generic worker natively supports multiple integrations in a single process; Phase 5 (KubernetesExecutor) only adds the Kubernetes orchestration layer (pool management, routing, auto-scaling) on top
 17. **KubernetesExecutor unified** — a single `KubernetesExecutor` with `max_integrations_per_worker` replaces the former `KubernetesDedicatedExecutor` and `KubernetesWorkerExecutor`; dedicated pod behavior is just `max_integrations_per_worker=1`, simplifying the roadmap from 8 to 7 phases
 
 These decisions can be revisited as we learn more from implementation and production use.
