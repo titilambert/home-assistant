@@ -14,6 +14,9 @@ _LOGGER = logging.getLogger(__name__)
 # hass.data key storing {entry_id: ProcessExecutor}
 DATA_EXECUTORS = "runtime_executors"
 
+# hass.data key storing {entry_id: worker_address} for registry-managed workers
+DATA_WORKER_ADDRESSES = "runtime_worker_addresses"
+
 # hass.data key storing the runtime mode per entry_id
 DATA_RUNTIME_MODE = "runtime_mode"  # dict[entry_id, "local" | "remote"]
 
@@ -63,11 +66,80 @@ async def async_setup_remote(
     entry: ConfigEntry,
     core_address: str = "localhost:50051",
     worker_port: int = 50052,
+    worker_address: str | None = None,
 ) -> bool:
-    """Launch a ProcessExecutor for the given config entry.
+    """Set up remote execution for a config entry.
+
+    Two modes:
+    - worker_address provided: the worker is already running (managed by the
+      horizontal_scaling registry). Skip subprocess launch and just register
+      the entry against that worker address.
+    - worker_address is None: launch a new subprocess via ProcessExecutor
+      (legacy / standalone behaviour).
 
     Called by an integration's async_setup_entry when runtime mode is REMOTE.
     """
+    if worker_address is not None:
+        # Phase 2 path: worker already running, managed by horizontal_scaling.
+        # Send SetupEntry to the worker via gRPC so it loads the integration.
+        from homeassistant.grpc.worker_client import WorkerClient
+
+        client = WorkerClient(entry.entry_id, worker_address)
+        await client.connect()
+
+        try:
+            success = await client.setup_entry(entry.entry_id)
+            if not success:
+                _LOGGER.error(
+                    "Worker at %s failed to set up entry_id=%s",
+                    worker_address,
+                    entry.entry_id,
+                )
+                await client.close()
+                return False
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error(
+                "SetupEntry failed for entry_id=%s at %s: %s",
+                entry.entry_id,
+                worker_address,
+                err,
+            )
+            await client.close()
+            return False
+
+        # Store client for teardown
+        worker_addresses: dict[str, str] = hass.data.setdefault(
+            DATA_WORKER_ADDRESSES, {}
+        )
+        worker_addresses[entry.entry_id] = worker_address
+
+        # Store client in DATA_WORKER_CLIENTS for service routing
+        from homeassistant.grpc.services.state_service import DATA_WORKER_CLIENTS
+
+        clients: dict = hass.data.setdefault(DATA_WORKER_CLIENTS, {})
+        clients[entry.entry_id] = client
+
+        async def _teardown_worker() -> None:
+            try:
+                await client.teardown_entry(entry.entry_id)
+            except Exception:  # noqa: BLE001
+                pass
+            await client.close()
+            worker_addresses.pop(entry.entry_id, None)
+            clients.pop(entry.entry_id, None)
+
+        entry.async_on_unload(_teardown_worker)
+
+        _LOGGER.info(
+            "Remote worker (registry-managed) set up entry_id=%s "
+            "(domain=%s, address=%s)",
+            entry.entry_id,
+            entry.domain,
+            worker_address,
+        )
+        return True
+
+    # Legacy path: launch a subprocess via ProcessExecutor.
     from homeassistant.executors.process import ProcessExecutor
 
     executors: dict[str, ProcessExecutor] = hass.data.setdefault(DATA_EXECUTORS, {})
@@ -94,7 +166,7 @@ async def async_setup_remote(
     entry.async_on_unload(_stop_executor)
 
     _LOGGER.info(
-        "Remote worker started for entry_id=%s (domain=%s)",
+        "Remote worker (subprocess) started for entry_id=%s (domain=%s)",
         entry.entry_id,
         entry.domain,
     )

@@ -21,7 +21,13 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_STATISTICS_ONLY, DOMAIN
+from .const import (
+    CONF_RUNTIME_MODE,
+    CONF_STATISTICS_ONLY,
+    CONF_WORKER_NAME,
+    DOMAIN,
+    RUNTIME_MODE_REMOTE,
+)
 from .coordinator import PiHoleConfigEntry, PiHoleData, PiHoleUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,13 +50,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
         set_runtime_mode,
     )
 
-    from .const import CONF_RUNTIME_MODE, RUNTIME_MODE_REMOTE  # noqa: F401
-
     # Sync runtime mode from entry.data to hass.data
     runtime_mode = entry.data.get(CONF_RUNTIME_MODE, "local")
     set_runtime_mode(hass, entry.entry_id, runtime_mode)
 
     if is_remote(hass, entry):
+        from homeassistant.components.horizontal_scaling.const import (
+            DATA_WORKER_REGISTRY,
+        )
+
+        worker_name = entry.data.get(CONF_WORKER_NAME)
+        registry = hass.data.get(DATA_WORKER_REGISTRY)
+
+        if registry and worker_name:
+            worker = registry.get_worker(worker_name)
+            if worker and worker.status == "running":
+                return await async_setup_remote(
+                    hass,
+                    entry,
+                    core_address="localhost:50051",
+                    worker_address=worker.address,
+                )
+            _LOGGER.error(
+                "Worker '%s' is not available for entry %s",
+                worker_name,
+                entry.entry_id,
+            )
+            return False
+
+        # Fallback: no worker registry or no worker name → old subprocess behaviour
         return await async_setup_remote(hass, entry)
 
     host = entry.data[CONF_HOST]

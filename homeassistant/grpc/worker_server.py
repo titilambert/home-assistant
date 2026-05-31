@@ -17,10 +17,60 @@ DEFAULT_WORKER_PORT = 50052
 
 
 class WorkerServiceServicer(core_pb2_grpc.WorkerServiceServicer):
-    """Handles CallService RPCs from Core."""
+    """Handles WorkerService RPCs from Core."""
 
-    def __init__(self, services_proxy: Any) -> None:
+    def __init__(self, services_proxy: Any, hass_proxy: Any = None) -> None:
         self._services = services_proxy  # ServicesProxy instance from remote_hass.py
+        self._hass = hass_proxy  # HomeAssistantGrpcProxy instance
+        self._entries: dict[str, Any] = {}  # entry_id -> _MinimalConfigEntry
+
+    async def SetupEntry(self, request, context):
+        """Load an integration into this worker (called by Core in persistent mode)."""
+        entry_id = request.entry_id
+        _LOGGER.info("Core requested SetupEntry for entry_id=%s", entry_id)
+
+        if self._hass is None:
+            return core_pb2.WorkerSetupEntryResponse(
+                success=False, error="Worker has no hass proxy"
+            )
+
+        if entry_id in self._entries:
+            _LOGGER.debug("Entry %s already loaded", entry_id)
+            return core_pb2.WorkerSetupEntryResponse(success=True)
+
+        try:
+            from homeassistant.worker.main import _setup_integration
+
+            entry = await _setup_integration(self._hass, self._hass._stub, entry_id)
+            if entry is None:
+                return core_pb2.WorkerSetupEntryResponse(
+                    success=False,
+                    error=f"async_setup_entry failed for entry_id={entry_id}",
+                )
+            self._entries[entry_id] = entry
+            # Register with Core so service calls are routed here
+            worker_address = (
+                f"localhost:{self._port if hasattr(self, '_port') else 50052}"
+            )
+            await self._hass._stub.RegisterWorker(
+                core_pb2.RegisterWorkerRequest(
+                    entry_id=entry_id,
+                    worker_address=worker_address,
+                )
+            )
+            return core_pb2.WorkerSetupEntryResponse(success=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("SetupEntry failed for entry_id=%s", entry_id)
+            return core_pb2.WorkerSetupEntryResponse(success=False, error=str(err))
+
+    async def TeardownEntry(self, request, context):
+        """Unload an integration from this worker (called by Core)."""
+        entry_id = request.entry_id
+        _LOGGER.info("Core requested TeardownEntry for entry_id=%s", entry_id)
+        entry = self._entries.pop(entry_id, None)
+        if entry is not None:
+            await entry.async_unload()
+        return core_pb2.WorkerTeardownEntryResponse(success=True)
 
     async def CallService(self, request, context):
         """Dispatch a service call received from Core to the local handler."""
@@ -68,16 +118,20 @@ class WorkerGrpcServer:
         self,
         services_proxy: Any,
         port: int = DEFAULT_WORKER_PORT,
+        hass_proxy: Any = None,
     ) -> None:
         self.port = port
         self._services = services_proxy
+        self._hass = hass_proxy
         self._server: grpc.aio.Server | None = None
+        self._servicer: WorkerServiceServicer | None = None
 
     async def start(self) -> None:
         """Start the gRPC server and begin accepting connections."""
         self._server = grpc.aio.server()
-        servicer = WorkerServiceServicer(self._services)
-        core_pb2_grpc.add_WorkerServiceServicer_to_server(servicer, self._server)
+        self._servicer = WorkerServiceServicer(self._services, self._hass)
+        self._servicer._port = self.port  # give servicer access to the port
+        core_pb2_grpc.add_WorkerServiceServicer_to_server(self._servicer, self._server)
         listen_addr = f"[::]:{self.port}"
         self._server.add_insecure_port(listen_addr)
         await self._server.start()

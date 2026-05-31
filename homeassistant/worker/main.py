@@ -137,7 +137,9 @@ async def _setup_integration(hass, stub, entry_id: str) -> _MinimalConfigEntry |
     return entry
 
 
-async def _main(core_address: str, entry_ids: list[str], worker_port: int) -> None:
+async def _main(
+    core_address: str, entry_ids: list[str], worker_port: int, worker_name: str = ""
+) -> None:
     """Run the generic worker."""
     _LOGGER.info(
         "Generic worker starting (core=%s, entries=%s)", core_address, entry_ids
@@ -157,8 +159,28 @@ async def _main(core_address: str, entry_ids: list[str], worker_port: int) -> No
     # Start the worker gRPC server
     from homeassistant.grpc.worker_server import WorkerGrpcServer
 
-    worker_server = WorkerGrpcServer(hass.services, port=worker_port)
+    worker_server = WorkerGrpcServer(hass.services, port=worker_port, hass_proxy=hass)
     await worker_server.start()
+
+    # Register the worker with Core (persistent mode — no entry_id yet)
+    if not entry_ids and worker_name:
+        from homeassistant.grpc.protos import core_pb2 as _pb2
+
+        worker_address = f"localhost:{worker_port}"
+        try:
+            await hass._stub.RegisterWorker(
+                _pb2.RegisterWorkerRequest(
+                    entry_id=f"__worker__{worker_name}",
+                    worker_address=worker_address,
+                )
+            )
+            _LOGGER.info(
+                "Worker '%s' registered with Core at %s",
+                worker_name,
+                worker_address,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Could not register with Core: %s", err)
 
     # Set up each integration
     from homeassistant.grpc.protos import core_pb2
@@ -182,17 +204,23 @@ async def _main(core_address: str, entry_ids: list[str], worker_port: int) -> No
                 worker_address,
             )
 
-    if not entries:
+    if entry_ids and not entries:
         _LOGGER.error("No integrations were set up successfully — exiting")
         await worker_server.stop()
         await hass.close()
         sys.exit(1)
 
-    _LOGGER.info(
-        "Worker running with %d integration(s): %s",
-        len(entries),
-        [e.domain for e in entries],
-    )
+    if entries:
+        _LOGGER.info(
+            "Worker running with %d integration(s): %s",
+            len(entries),
+            [e.domain for e in entries],
+        )
+    else:
+        _LOGGER.info(
+            "Worker running in persistent mode on port %d — waiting for SetupEntry calls from Core",
+            worker_port,
+        )
 
     # Keep running until interrupted
     stop_event = asyncio.Event()
@@ -229,14 +257,23 @@ def main() -> None:
         "--entry-id",
         action="append",
         dest="entry_ids",
-        required=True,
-        help=("Config entry ID to load (can be repeated for multiple integrations)"),
+        default=[],
+        help=(
+            "Config entry ID to load (can be repeated for multiple integrations). "
+            "If omitted, the worker starts in persistent mode and waits for "
+            "SetupEntry calls from Core."
+        ),
     )
     parser.add_argument(
         "--worker-port",
         type=int,
         default=50052,
         help="Port for the worker gRPC server (default: 50052)",
+    )
+    parser.add_argument(
+        "--worker-name",
+        default="",
+        help="Name of this worker (used for registration with Core in persistent mode)",
     )
     parser.add_argument(
         "--debug",
@@ -249,7 +286,9 @@ def main() -> None:
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    asyncio.run(_main(args.core_address, args.entry_ids, args.worker_port))
+    asyncio.run(
+        _main(args.core_address, args.entry_ids, args.worker_port, args.worker_name)
+    )
 
 
 if __name__ == "__main__":

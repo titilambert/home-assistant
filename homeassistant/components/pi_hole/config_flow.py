@@ -23,6 +23,7 @@ from homeassistant.const import (
 from . import Hole, api_by_version, determine_api_version
 from .const import (
     CONF_RUNTIME_MODE,
+    CONF_WORKER_NAME,
     DEFAULT_LOCATION,
     DEFAULT_NAME,
     DEFAULT_SSL,
@@ -113,11 +114,42 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_runtime(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask the user whether to run this integration locally or in a remote worker."""
+        """Ask the user where to run this integration."""
+        from homeassistant.components.horizontal_scaling.const import (
+            DATA_WORKER_REGISTRY,
+        )
+
+        registry = self.hass.data.get(DATA_WORKER_REGISTRY)
+        available_workers = registry.get_available_workers() if registry else []
+
+        # No workers declared → skip this step and go LOCAL
+        if not available_workers:
+            return self.async_create_entry(
+                title=self._config[CONF_NAME],
+                data={**self._config, CONF_RUNTIME_MODE: RUNTIME_MODE_LOCAL},
+            )
+
         if user_input is not None:
-            self._runtime_mode = user_input[CONF_RUNTIME_MODE]
-            data = {**self._config, CONF_RUNTIME_MODE: self._runtime_mode}
+            choice = user_input[CONF_RUNTIME_MODE]
+            if choice == RUNTIME_MODE_LOCAL:
+                data = {**self._config, CONF_RUNTIME_MODE: RUNTIME_MODE_LOCAL}
+            else:
+                # choice is "worker:{name}"
+                worker_name = choice.split(":", 1)[1]
+                data = {
+                    **self._config,
+                    CONF_RUNTIME_MODE: RUNTIME_MODE_REMOTE,
+                    CONF_WORKER_NAME: worker_name,
+                }
             return self.async_create_entry(title=self._config[CONF_NAME], data=data)
+
+        # Build options: local + one entry per available worker
+        options: dict[str, str] = {
+            RUNTIME_MODE_LOCAL: "Local — Run in Home Assistant Core"
+        }
+        for worker in available_workers:
+            key = f"worker:{worker.name}"
+            options[key] = f"Remote — {worker.name} ({worker.worker_type})"
 
         return self.async_show_form(
             step_id="runtime",
@@ -126,12 +158,11 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         CONF_RUNTIME_MODE,
                         default=RUNTIME_MODE_LOCAL,
-                    ): vol.In([RUNTIME_MODE_LOCAL, RUNTIME_MODE_REMOTE]),
+                    ): vol.In(options),
                 }
             ),
             description_placeholders={
-                "local_description": "Run in Home Assistant Core (default)",
-                "remote_description": "Run in a separate worker process",
+                "worker_count": str(len(available_workers)),
             },
         )
 
