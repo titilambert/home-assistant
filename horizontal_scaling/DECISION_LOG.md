@@ -22,7 +22,8 @@ This document records the key architectural and technical decisions made for the
 16. [Multiple Integrations from Phase 1](#multiple-integrations-from-phase-1)
 17. [KubernetesDedicatedExecutor Removed — Merged into KubernetesExecutor](#kubernetesdedicatedexecutor-removed--merged-into-kubernetesexecutor)
 18. [Worker Configuration as a Dedicated Phase](#worker-configuration-as-a-dedicated-phase)
-19. [Summary](#summary)
+19. [Options Flow for Worker Reassignment — Deferred](#options-flow-for-worker-reassignment--deferred)
+20. [Summary](#summary)
 
 ---
 
@@ -996,6 +997,55 @@ The config flow runs in the Core as it does today. Once the flow is complete and
 
 ---
 
+## DockerExecutor prioritized over Complete Core API
+
+**Decision:** DockerExecutor (Phase 3) is implemented before Complete Core API (Phase 5) because container isolation provides immediate practical value for users before the full API surface is needed.
+
+**Rationale:** The generic worker proxy already covers enough of the hass.* API for common integrations. Docker isolation is more impactful for production deployments than completing the proxy API. Complete Core API will be addressed once Docker and Kubernetes executors are operational.
+
+---
+
+## Single Docker Image for Core and Worker
+
+**Decision:** In production, the same `homeassistant/home-assistant` Docker image is used for both the Core and the Worker. The image is started in worker mode by passing `--mode worker` arguments.
+
+**Context:** Initially, a separate `Dockerfile.worker` was created for the worker. This created a maintenance burden (two images to keep in sync) and a dependency problem (custom components and HACS integrations installed in Core would not be available in the worker image).
+
+**Alternatives considered:**
+1. **Separate worker image** — smaller, faster to pull. ❌ Two images to maintain, custom components not available.
+2. **Single image, two modes** ✅ — same image, `--mode worker` flag changes the entrypoint behavior.
+
+**Implementation:**
+- The official `homeassistant/home-assistant` image entrypoint detects `--mode worker` and runs `python -m homeassistant.worker.main` instead of the normal HA startup.
+- In `configuration.yaml`, `type: docker` workers do not need an `image` field override — they use the same image as Core by default.
+- A `horizontal_scaling/Dockerfile.worker` exists for **development/testing only** (lighter image without the full HA stack).
+
+**Consequence:**
+- `CONF_WORKER_IMAGE` becomes optional for Docker workers (defaults to the same image as Core).
+- The production Dockerfile (`Dockerfile`) needs an entrypoint script that supports `--mode worker`.
+- Custom components (HACS) are automatically available in the worker.
+
+**Phase:** The entrypoint modification in the official image is part of Phase 3 (DockerExecutor). The development `Dockerfile.worker` is a temporary artifact.
+
+---
+
+## Options Flow for Worker Reassignment — Deferred
+
+**Decision:** The ability to reassign an integration to a different worker via the options flow is documented but not yet implemented.
+
+**Context:** Currently, the worker is chosen only at integration creation time (config flow step “Runtime”). Once created, the only way to change the worker is to delete and recreate the integration.
+
+**What needs to be implemented:**
+- An options flow step in the integration’s config flow (e.g. Pi-hole) showing the available workers dropdown
+- When the user changes the worker: TeardownEntry on the old worker, SetupEntry on the new worker, update entry.data with the new worker_name
+- The RuntimeFactory must handle the worker switch gracefully (stop old worker client, start new one)
+
+**Why deferred:** This is a Phase 2 feature that was omitted from the initial implementation. It will be added in a future iteration of Phase 2. The core infrastructure (WorkerRegistry, WorkerClient, SetupEntry/TeardownEntry RPCs) is already in place.
+
+**Phase:** Phase 2 (Worker Configuration) — deferred iteration.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -1015,7 +1065,10 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 13. **Hardware transparency** — remote workers on hardware-equipped machines support Bluetooth/USB/Serial natively
 14. **Config flows stay in Core** — the RuntimeFactory is the single routing point; flows need zero modification
 15. **ComponentResolver** — workers download and install custom integrations (HACS/GitHub) locally; the Core is the single source of truth for integration origin via the `source` field in `GetEntryResponse`
-16. **Multi-integration support in Phase 1** — the generic worker natively supports multiple integrations in a single process; Phase 5 (KubernetesExecutor) only adds the Kubernetes orchestration layer (pool management, routing, auto-scaling) on top
+16. **Multi-integration support in Phase 1** — the generic worker natively supports multiple integrations in a single process; Phase 4 (KubernetesExecutor) only adds the Kubernetes orchestration layer (pool management, routing, auto-scaling) on top
 17. **KubernetesExecutor unified** — a single `KubernetesExecutor` with `max_integrations_per_worker` replaces the former `KubernetesDedicatedExecutor` and `KubernetesWorkerExecutor`; dedicated pod behavior is just `max_integrations_per_worker=1`, simplifying the roadmap from 8 to 7 phases
+18. **DockerExecutor before Complete Core API** — Phase 3 (Docker) and Phase 4 (Kubernetes) are prioritised over Phase 5 (Complete Core API) because container isolation delivers immediate production value; the existing hass.* proxy already covers common integrations
+19. **Single Docker image** — the same `homeassistant/home-assistant` image serves both Core and Worker; `--mode worker` redirects the entrypoint to `python -m homeassistant.worker.main`; `CONF_WORKER_IMAGE` is optional for Docker workers (defaults to the Core image); custom components (HACS) are automatically available in the worker
+20. **Options flow for worker reassignment deferred** — changing the worker of an existing integration via the options flow is documented but not yet implemented; the worker is currently chosen at creation time only; the core infrastructure (WorkerRegistry, WorkerClient, SetupEntry/TeardownEntry RPCs) is already in place and will support this in a future Phase 2 iteration
 
 These decisions can be revisited as we learn more from implementation and production use.

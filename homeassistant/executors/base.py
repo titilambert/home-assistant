@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class ExecutorBase(ABC):
@@ -13,7 +14,7 @@ class ExecutorBase(ABC):
         self,
         entry_ids: list[str],
         core_address: str = "localhost:50051",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Start the integration(s) in the executor."""
 

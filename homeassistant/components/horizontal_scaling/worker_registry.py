@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+    from .workers.base import BaseWorker
+
 from .const import (
     CONF_WORKER_NAME,
     CONF_WORKER_TYPE,
-    CONF_WORKER_MAX_INTEGRATIONS,
-    WORKER_TYPE_PROCESS,
-    WORKER_TYPE_DOCKER,
-    WORKER_TYPE_REMOTE,
-    WORKER_TYPE_KUBERNETES,
     WORKER_STATUS_RUNNING,
-    WORKER_STATUS_UNAVAILABLE,
-    WORKER_STATUS_NOT_IMPLEMENTED,
+    WORKER_TYPE_DOCKER,
+    WORKER_TYPE_KUBERNETES,
+    WORKER_TYPE_PROCESS,
+    WORKER_TYPE_REMOTE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,15 +28,16 @@ class WorkerRegistry:
     """Registry of all declared workers."""
 
     def __init__(self, hass: HomeAssistant, workers_conf: list[dict]) -> None:
+        """Initialize the worker registry."""
         self._hass = hass
         self._workers: dict[str, BaseWorker] = {}
         self._conf = workers_conf
         self._build_workers()
 
     def _build_workers(self) -> None:
-        from .workers.process import ProcessWorker
-        from .workers.remote import RemoteWorker
-        from .workers.not_implemented import NotImplementedWorker
+        from .workers.not_implemented import NotImplementedWorker  # noqa: PLC0415
+        from .workers.process import ProcessWorker  # noqa: PLC0415
+        from .workers.remote import RemoteWorker  # noqa: PLC0415
 
         for conf in self._conf:
             name = conf[CONF_WORKER_NAME]
@@ -47,7 +47,11 @@ class WorkerRegistry:
                 worker = ProcessWorker(self._hass, conf)
             elif worker_type == WORKER_TYPE_REMOTE:
                 worker = RemoteWorker(self._hass, conf)
-            elif worker_type in (WORKER_TYPE_DOCKER, WORKER_TYPE_KUBERNETES):
+            elif worker_type == WORKER_TYPE_DOCKER:
+                from .workers.docker import DockerWorker  # noqa: PLC0415
+
+                worker = DockerWorker(self._hass, conf)
+            elif worker_type == WORKER_TYPE_KUBERNETES:
                 worker = NotImplementedWorker(self._hass, conf)
             else:
                 _LOGGER.error("Unknown worker type: %s", worker_type)

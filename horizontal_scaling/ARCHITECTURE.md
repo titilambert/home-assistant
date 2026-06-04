@@ -152,6 +152,7 @@ async def async_start(hass):
 - Worker status monitoring: retry connection on failure, log errors
 - RBAC permission check at startup for kubernetes workers (SelfSubjectAccessReview)
 - Full configuration reference documented in `horizontal_scaling/WORKERS.md`
+- Options flow: allow changing the worker of an already-configured integration (not yet implemented)
 
 **Duration:** ~4 days
 
@@ -162,8 +163,9 @@ async def async_start(hass):
 - Worker at capacity is shown as unavailable in the dropdown
 - Remote worker unavailable at config flow time shows a clear error message
 - HA startup/shutdown correctly manages worker lifecycle per type
+- ⏭ User can change the worker of an existing integration via the options flow (deferred)
 
-### Phase 4: DockerExecutor
+### Phase 3: DockerExecutor
 
 **Goal:** Container isolation
 
@@ -177,7 +179,7 @@ async def async_start(hass):
 
 **Success criteria:** Pi-hole runs in Docker container with resource limits
 
-### Phase 5: KubernetesExecutor
+### Phase 4: KubernetesExecutor
 
 **Goal:** Deploy workers on Kubernetes with pool management
 
@@ -220,7 +222,7 @@ async def async_start(hass):
 - Integrations list shows LOCAL/REMOTE status for each integration
 - User is notified when a worker goes offline
 
-### Phase 3: Complete Core API
+### Phase 5: Complete Core API
 
 **Goal:** Support all hass.* APIs
 

@@ -5,6 +5,21 @@
 
 cd /config || bashio::exit.nok "Can't find config folder!"
 
+# Horizontal scaling: support worker mode.
+# Set HA_MODE=worker to run as a generic worker instead of the full Core.
+# Pass worker arguments via HA_WORKER_ARGS env var.
+# Example:
+#   docker run -e HA_MODE=worker \
+#              -e HA_WORKER_ARGS="--core-address homeassistant:50051 --worker-port 50052 --worker-name my-worker" \
+#              ghcr.io/home-assistant/home-assistant:stable
+if [[ "${HA_MODE:-core}" == "worker" ]]; then
+  bashio::log.info "Starting in WORKER mode"
+  exec python3 -m homeassistant.worker.main \
+    --core-address "${HA_WORKER_CORE_ADDRESS:-localhost:50051}" \
+    --worker-port "${HA_WORKER_PORT:-50052}" \
+    --worker-name "${HA_WORKER_NAME:-worker}"
+fi
+
 # Enable mimalloc for Home Assistant Core, unless disabled
 if [[ -z "${DISABLE_JEMALLOC+x}" ]]; then
   export LD_PRELOAD="/usr/local/lib/libjemalloc.so.2"

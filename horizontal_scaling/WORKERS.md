@@ -119,6 +119,24 @@ horizontal_scaling:
 | `resources.memory` | ❌ | unlimited | Memory limit (Docker `--memory`) |
 | `resources.cpu_shares` | ❌ | 1024 | Relative CPU priority (Docker `--cpu-shares`) |
 
+**Note on Docker image:**
+In production, the `image` field should point to the same `homeassistant/home-assistant` image
+used by the Core. This ensures all integrations and custom components (HACS) installed in Core
+are available in the worker.
+
+Example using the same image as Core:
+```yaml
+    - name: "NAS Worker"
+      type: docker
+      host: "tcp://192.168.1.50:2375"
+      image: "ghcr.io/home-assistant/home-assistant:stable"
+      port: 50053
+```
+
+The container is started with `--mode worker` automatically by HA.
+
+For local development, a lightweight `horizontal_scaling/Dockerfile.worker` is available.
+
 **Behavior:**
 - At HA startup: any existing container with the same name is stopped and removed,
   then a new container is created and started

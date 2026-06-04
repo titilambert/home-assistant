@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from typing import Any
 
 from .base import ExecutorBase
 
@@ -25,7 +26,7 @@ class ProcessExecutor(ExecutorBase):
         entry_ids: list[str],
         core_address: str = "localhost:50051",
         worker_port: int = 50052,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Start the generic worker subprocess for the given entry_ids."""
         self._entry_ids = entry_ids
@@ -73,7 +74,7 @@ class ProcessExecutor(ExecutorBase):
                 task.cancel()
 
     @staticmethod
-    async def _stream_output(stream, prefix: str) -> None:
+    async def _stream_output(stream: asyncio.StreamReader | None, prefix: str) -> None:
         if stream is None:
             return
         async for line in stream:
