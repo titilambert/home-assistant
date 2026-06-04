@@ -189,7 +189,11 @@ async def async_start(hass):
 - Routing logic: Core assigns entry_ids to the least-loaded worker pod
 - Worker auto-scaling (HPA based on number of integrations)
 - Configuration: max_integrations_per_worker (default: unlimited, set to 1 for dedicated mode)
-- Pod/Service manifest templates
+- User-provided manifest support: HA loads a standard K8s manifest (Pod + Service) and overrides
+  only `metadata.name`, `metadata.namespace`, `spec.containers[0].image`, and
+  `spec.containers[0].env` (merged); all other fields are preserved from the user's manifest
+- Default manifest generation when no manifest is provided
+- `extra_manifests` support: additional K8s manifests (NetworkPolicy, PDB, etc.) applied as-is
 - Health checks and probes
 
 **Note:** A "dedicated" pod per integration is just a special case: set max_integrations_per_worker: 1 in the executor config. No separate executor needed.

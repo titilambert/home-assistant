@@ -1,0 +1,113 @@
+# Home Assistant Worker — example Kubernetes manifest
+#
+# This file is used as a template by the horizontal_scaling component.
+# HA will override the following fields automatically:
+#   Pod:     metadata.name, metadata.namespace,
+#            spec.containers[0].image,
+#            spec.containers[0].env (HA_MODE, HA_WORKER_CORE_ADDRESS,
+#                                    HA_WORKER_PORT, HA_WORKER_NAME merged in)
+#   Service: metadata.name, metadata.namespace,
+#            spec.selector, spec.ports[0].port
+#
+# Everything else is preserved as-is — customize freely.
+# No placeholders needed: write standard K8s YAML.
+#
+# Reference in configuration.yaml:
+#   manifest: /config/k8s/worker.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ha-worker                    # overridden by HA
+  namespace: homeassistant           # overridden by HA
+  labels:
+    app: ha-worker
+    app.kubernetes.io/managed-by: home-assistant
+    prometheus.io/scrape: "true"     # enable Prometheus scraping
+  annotations:
+    prometheus.io/port: "50052"
+    prometheus.io/path: "/metrics"
+spec:
+  restartPolicy: Always
+
+  # Node selection — customize to target specific nodes
+  nodeSelector:
+    node.ttb.lt/tier: high
+
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: integration
+      effect: NoSchedule
+
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - my-node-1
+
+  containers:
+    - name: worker
+      image: homeassistant/home-assistant:local   # overridden by HA
+      imagePullPolicy: IfNotPresent
+
+      # env is merged by HA — do not set HA_MODE, HA_WORKER_* here,
+      # they will be added automatically. You can add your own env vars:
+      env:
+        - name: TZ
+          value: "Europe/Paris"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+
+      ports:
+        - containerPort: 50052       # overridden by HA with configured port
+          name: grpc
+
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+
+      livenessProbe:
+        tcpSocket:
+          port: grpc
+        initialDelaySeconds: 30
+        periodSeconds: 10
+
+      readinessProbe:
+        tcpSocket:
+          port: grpc
+        initialDelaySeconds: 10
+        periodSeconds: 5
+
+  # Optional: mount secrets (API keys, certificates, etc.)
+  # volumes:
+  #   - name: secrets
+  #     secret:
+  #       secretName: ha-worker-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ha-worker                    # overridden by HA
+  namespace: homeassistant           # overridden by HA
+  labels:
+    app: ha-worker
+    app.kubernetes.io/managed-by: home-assistant
+spec:
+  type: ClusterIP
+  selector:
+    app: ha-worker                   # overridden by HA
+  ports:
+    - name: grpc
+      port: 50052                    # overridden by HA with configured port
+      targetPort: grpc
+      protocol: TCP

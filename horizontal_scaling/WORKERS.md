@@ -213,45 +213,94 @@ WantedBy=multi-user.target
 ### Kubernetes Worker
 
 HA creates a Pod and a ClusterIP Service in the specified namespace.
-Only **in-cluster** mode is supported: HA must itself run inside the Kubernetes
-cluster and use the pod's service account for API access.
+Only **in-cluster** mode is supported by default.
 
 ```yaml
 horizontal_scaling:
   workers:
     - name: "K8s Worker"
       type: kubernetes
-      namespace: "homeassistant"
-      image: "homeassistant/worker:2024.1"
+      # Authentication — choose one:
+      incluster: true                    # HA runs inside K8s (uses pod service account)
+      # kubeconfig: /config/k8s.yaml    # HA runs outside K8s
+
+      namespace: homeassistant
+      image: "homeassistant/home-assistant:local"
       port: 50052
-      max_integrations: 20              # optional
-      pod_spec:                         # optional, merged with base pod template
-        resources:
-          requests:
-            cpu: "50m"
-            memory: "64Mi"
-          limits:
-            cpu: "200m"
-            memory: "256Mi"
-        node_selector:
-          node.ttb.lt/tier: high
-        tolerations:
-          - key: workload
-            operator: Equal
-            value: integration
-            effect: NoSchedule
-        env:
-          - name: MY_VAR
-            value: "my_value"
+      max_integrations: 20              # optional, unlimited by default
+
+      # Optional: path to a custom manifest (Pod + Service).
+      # If omitted, HA generates a minimal default manifest.
+      # HA will override the following fields regardless of what is in the manifest:
+      #   Pod:     metadata.name, metadata.namespace, spec.containers[0].image,
+      #            spec.containers[0].env (HA_MODE, HA_WORKER_CORE_ADDRESS,
+      #            HA_WORKER_PORT, HA_WORKER_NAME are added/merged)
+      #   Service: metadata.name, metadata.namespace, spec.selector, spec.ports[0].port
+      # Everything else (labels, annotations, nodeSelector, tolerations, affinity,
+      # resources, volumes, etc.) is preserved from the manifest.
+      manifest: /config/k8s/worker.yaml
+
+      # Optional: additional K8s manifests applied as-is (NetworkPolicy, PDB, Ingress, etc.)
+      extra_manifests:
+        - /config/k8s/worker-networkpolicy.yaml
+```
+
+**Example manifest** (`/config/k8s/worker.yaml`):
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ha-worker          # overridden by HA
+  labels:
+    app: ha-worker
+    prometheus.io/scrape: "true"
+  annotations:
+    prometheus.io/port: "50052"
+spec:
+  nodeSelector:
+    node.ttb.lt/tier: high
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: integration
+      effect: NoSchedule
+  containers:
+    - name: worker
+      image: placeholder   # overridden by HA with the configured image
+      # env is merged by HA: HA_MODE, HA_WORKER_CORE_ADDRESS, HA_WORKER_PORT, HA_WORKER_NAME
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ha-worker          # overridden by HA
+  labels:
+    app: ha-worker
+spec:
+  type: ClusterIP
+  selector:
+    app: ha-worker         # overridden by HA
+  ports:
+    - port: 50052          # overridden by HA with the configured port
+      targetPort: 50052
 ```
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `namespace` | ✅ | — | Kubernetes namespace where the Pod and Service are created |
-| `image` | ✅ | — | Container image for the worker Pod |
-| `port` | ✅ | — | gRPC port the worker listens on (exposed via ClusterIP Service) |
-| `max_integrations` | ❌ | unlimited | Max integrations hosted |
-| `pod_spec` | ❌ | — | Partial PodSpec merged into the base worker Pod template |
+| `incluster` | one of these | — | Use K8s service account (HA runs inside cluster) |
+| `kubeconfig` | one of these | — | Path to kubeconfig file (HA runs outside cluster) |
+| `namespace` | ✅ | — | K8s namespace for Pod and Service |
+| `image` | ✅ | — | Container image |
+| `port` | ✅ | — | gRPC port |
+| `max_integrations` | ❌ | unlimited | Max integrations |
+| `manifest` | ❌ | auto-generated | Path to custom Pod+Service manifest |
+| `extra_manifests` | ❌ | none | Additional manifests applied as-is |
 
 **Behavior:**
 - At HA startup: any existing Pod/Service with the same name is deleted,
@@ -263,16 +312,6 @@ horizontal_scaling:
 - At HA shutdown: the Pod and Service are deleted
 - If the Pod crashes, Core logs an error and retries periodically
 - HA validates its RBAC permissions at startup (see [Kubernetes RBAC Requirements](#kubernetes-rbac-requirements))
-
-**Supported `pod_spec` fields:**
-- `resources` (requests/limits for cpu and memory)
-- `node_selector`
-- `tolerations`
-- `affinity`
-- `env` (environment variables)
-- `volumes` and `volume_mounts`
-- `priority_class_name`
-- `security_context`
 
 ---
 
@@ -425,23 +464,10 @@ horizontal_scaling:
     # In-cluster Kubernetes worker
     - name: "K8s Worker"
       type: kubernetes
+      incluster: true
       namespace: "homeassistant"
-      image: "homeassistant/worker:2024.1"
+      image: "homeassistant/home-assistant:local"
       port: 50055
       max_integrations: 20
-      pod_spec:
-        resources:
-          requests:
-            cpu: "50m"
-            memory: "64Mi"
-          limits:
-            cpu: "200m"
-            memory: "256Mi"
-        node_selector:
-          node.ttb.lt/tier: high
-        tolerations:
-          - key: workload
-            operator: Equal
-            value: integration
-            effect: NoSchedule
+      manifest: /config/k8s/worker.yaml
 ```

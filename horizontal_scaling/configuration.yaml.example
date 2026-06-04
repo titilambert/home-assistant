@@ -1,0 +1,91 @@
+# Home Assistant Horizontal Scaling — configuration.yaml example
+#
+# Add this to your configuration.yaml to declare workers.
+# See horizontal_scaling/WORKERS.md for full documentation.
+
+horizontal_scaling:
+  workers:
+
+    # -------------------------------------------------------------------------
+    # Process Worker — local subprocess
+    # Launched automatically at HA startup, killed at HA shutdown.
+    # -------------------------------------------------------------------------
+    - name: "Local Worker"
+      type: process
+      port: 50052
+      max_integrations: 10    # optional, unlimited by default
+
+    # -------------------------------------------------------------------------
+    # Docker Worker — container on a Docker host
+    # HA stops any existing container with the same name and creates a new one.
+    # Uses HA_MODE=worker env var to start the worker instead of the Core.
+    # The worker_address is deduced from the Docker host IP + port.
+    # -------------------------------------------------------------------------
+    - name: "NAS Worker"
+      type: docker
+      host: "tcp://192.168.1.50:2375"   # Docker daemon address
+      # host: "unix:///var/run/docker.sock"  # or local Docker socket
+      image: "homeassistant/home-assistant:local"  # same image as Core
+      port: 50053
+      max_integrations: 10    # optional
+      resources:              # optional resource limits
+        cpu: "0.5"            # --cpus equivalent
+        memory: "256m"        # --memory equivalent
+
+    # -------------------------------------------------------------------------
+    # Remote Worker — already running on a remote machine
+    # HA only connects to it, does not manage its lifecycle.
+    # Start the worker manually on the remote machine:
+    #
+    #   python -m homeassistant.worker.main \
+    #     --core-address homeassistant.local:50051 \
+    #     --worker-port 50054 \
+    #     --worker-name "RPi Garage"
+    #
+    # Or as a systemd service (see WORKERS.md).
+    # -------------------------------------------------------------------------
+    - name: "RPi Garage"
+      type: remote
+      address: "192.168.1.100:50054"
+      max_integrations: 3     # optional
+
+    # -------------------------------------------------------------------------
+    # Kubernetes Worker — Pod + ClusterIP Service in a K8s cluster
+    #
+    # Authentication — choose ONE of:
+    #   incluster: true        → HA runs inside K8s, uses pod service account
+    #   kubeconfig: /path      → HA runs outside K8s, uses kubeconfig file
+    #
+    # Manifest — HA creates a Pod + ClusterIP Service.
+    # If `manifest` is provided, HA reads it and overrides ONLY these fields:
+    #   Pod:     metadata.name, metadata.namespace,
+    #            spec.containers[0].image,
+    #            spec.containers[0].env (HA_MODE, HA_WORKER_CORE_ADDRESS,
+    #                                    HA_WORKER_PORT, HA_WORKER_NAME merged in)
+    #   Service: metadata.name, metadata.namespace,
+    #            spec.selector, spec.ports[0].port
+    # Everything else (labels, annotations, nodeSelector, tolerations, affinity,
+    # resources, volumes, etc.) is preserved from the manifest unchanged.
+    #
+    # If `manifest` is absent, HA generates a minimal default manifest.
+    #
+    # RBAC: HA needs permission to create/delete pods and services.
+    # See horizontal_scaling/WORKERS.md for the required RBAC manifest.
+    # -------------------------------------------------------------------------
+    - name: "K8s Worker"
+      type: kubernetes
+      incluster: true                           # or: kubeconfig: /config/k8s.yaml
+      namespace: homeassistant
+      image: "homeassistant/home-assistant:local"
+      port: 50055
+      max_integrations: 20                      # optional
+
+      # Optional: custom manifest (Pod + Service).
+      # Write standard K8s YAML — no placeholders needed.
+      # Example manifest at horizontal_scaling/k8s-worker.yaml.example
+      manifest: /config/k8s/worker.yaml         # optional
+
+      # Optional: additional manifests applied as-is (NetworkPolicy, PDB, etc.)
+      # HA does not interpret these — they are applied with the K8s API directly.
+      extra_manifests:                          # optional
+        - /config/k8s/worker-networkpolicy.yaml

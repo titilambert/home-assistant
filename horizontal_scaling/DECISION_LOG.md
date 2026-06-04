@@ -1046,6 +1046,23 @@ The config flow runs in the Core as it does today. Once the flow is complete and
 
 ---
 
+## Kubernetes Manifest Approach — User-Provided vs Generated
+
+**Decision:** The Kubernetes worker uses a user-provided manifest file where HA only overrides a minimal set of fields (name, namespace, image, env vars, port), rather than a HA-specific configuration schema or placeholder variables.
+
+**Alternatives considered:**
+1. **HA-specific schema** (`pod_spec`, `service_spec` fields in configuration.yaml) — ❌ Complex to maintain, requires reimplementing K8s schema in HA, doesn't cover all K8s features.
+2. **Placeholder variables** (`{{ HA_WORKER_NAME }}`, `{{ HA_WORKER_IMAGE }}`, etc.) — ❌ Requires a templating engine, makes manifest non-standard (can't be validated with kubectl).
+3. **User manifest + HA field injection** ✅ — User writes standard K8s YAML, HA overrides only what it needs to control. Everything else is preserved.
+
+**Fields overridden by HA:**
+- Pod: `metadata.name`, `metadata.namespace`, `spec.containers[0].image`, `spec.containers[0].env` (merged)
+- Service: `metadata.name`, `metadata.namespace`, `spec.selector`, `spec.ports[0].port`
+
+**Rationale:** Users already know K8s YAML. No need for HA to reimplement K8s concepts. Advanced features (Ingress, NetworkPolicy, PDB) are handled via `extra_manifests` applied as-is — HA doesn't need to understand them.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -1070,5 +1087,6 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 18. **DockerExecutor before Complete Core API** — Phase 3 (Docker) and Phase 4 (Kubernetes) are prioritised over Phase 5 (Complete Core API) because container isolation delivers immediate production value; the existing hass.* proxy already covers common integrations
 19. **Single Docker image** — the same `homeassistant/home-assistant` image serves both Core and Worker; `--mode worker` redirects the entrypoint to `python -m homeassistant.worker.main`; `CONF_WORKER_IMAGE` is optional for Docker workers (defaults to the Core image); custom components (HACS) are automatically available in the worker
 20. **Options flow for worker reassignment deferred** — changing the worker of an existing integration via the options flow is documented but not yet implemented; the worker is currently chosen at creation time only; the core infrastructure (WorkerRegistry, WorkerClient, SetupEntry/TeardownEntry RPCs) is already in place and will support this in a future Phase 2 iteration
+21. **Kubernetes manifest injection** — the Kubernetes worker accepts a user-provided standard K8s manifest (Pod + Service); HA overrides only `metadata.name`, `metadata.namespace`, `spec.containers[0].image`, and `spec.containers[0].env` (merged); all other fields (nodeSelector, tolerations, affinity, resources, volumes, labels, annotations) are preserved as-is; if no manifest is provided HA generates a minimal default; additional manifests (NetworkPolicy, PDB, etc.) are applied via `extra_manifests` without any HA interpretation
 
 These decisions can be revisited as we learn more from implementation and production use.
