@@ -7,6 +7,5 @@
   "integration_type": "device",
   "iot_class": "local_polling",
   "loggers": ["hole"],
-  "requirements": ["hole==0.9.0"],
-  "supports_remote": true
+  "requirements": ["hole==0.9.0"]
 }

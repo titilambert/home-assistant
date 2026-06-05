@@ -114,12 +114,9 @@ class DockerWorker(BaseWorker):
                     )
                     self._status = WORKER_STATUS_RUNNING
                     return
-                else:
-                    # Container exists but stopped — remove it and recreate
-                    _LOGGER.info(
-                        "Removing stopped container '%s'", self._container_name
-                    )
-                    existing.remove()
+                # Container exists but stopped — remove it and recreate
+                _LOGGER.info("Removing stopped container '%s'", self._container_name)
+                existing.remove()
 
             # Build resource limits
             kwargs: dict = {
@@ -163,7 +160,7 @@ class DockerWorker(BaseWorker):
                 self._address,
             )
 
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.error(
                 "Failed to start Docker worker '%s': %s",
                 self._name,

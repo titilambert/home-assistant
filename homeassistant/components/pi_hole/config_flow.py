@@ -56,10 +56,6 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                 CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
                 CONF_API_KEY: user_input[CONF_API_KEY],
             }
-            # _api_version is set by _async_try_connect and stored in entry.data
-            # so the worker can skip determine_api_version() and avoid a
-            # second authentication that would trigger Pi-hole's rate-limiter.
-            self._api_version: int | None = None
 
             self._async_abort_entries_match(
                 {
@@ -69,10 +65,8 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
             )
 
             if not (errors := await self._async_try_connect()):
-                if self._api_version is not None:
-                    self._config["api_version"] = self._api_version
                 return self.async_create_entry(
-                    title=self._config[CONF_NAME], data=self._config
+                    title=user_input[CONF_NAME], data=self._config
                 )
 
         user_input = user_input or {}
@@ -142,7 +136,6 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
         """Try to connect to the Pi-hole API and determine the version."""
         try:
             version = await determine_api_version(hass=self.hass, entry=self._config)
-            self._api_version = version
         except HoleError:
             return {"base": "cannot_connect"}
         pi_hole: Hole = api_by_version(self.hass, self._config, version)

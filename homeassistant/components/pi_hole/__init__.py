@@ -79,15 +79,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
 
     await er.async_migrate_entries(hass, entry.entry_id, update_unique_id)
 
-    # Use cached API version from config flow if available to avoid a second
-    # authentication request that could trigger Pi-hole's rate-limiter.
-    if "api_version" in entry.data:
-        version = entry.data["api_version"]
-        _LOGGER.debug("Using cached Pi-hole API version %s for %s", version, host)
-    else:
-        _LOGGER.debug("Determining Pi-hole API version for %s", host)
-        version = await determine_api_version(hass, dict(entry.data))
-        _LOGGER.debug("Pi-hole API version determined: %s", version)
+    _LOGGER.debug("Determining Pi-hole API version for %s", host)
+    version = await determine_api_version(hass, dict(entry.data))
+    _LOGGER.debug("Pi-hole API version determined: %s", version)
 
     # Once API version 5 is deprecated we should instantiate Hole directly
     api = api_by_version(hass, dict(entry.data), version)
