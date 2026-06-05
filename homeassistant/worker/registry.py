@@ -8,12 +8,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+    from homeassistant.worker.workers.base import BaseWorker
 
-    from .workers.base import BaseWorker
-
-from .const import (
-    CONF_WORKER_NAME,
-    CONF_WORKER_TYPE,
+from homeassistant.worker.const import (
     WORKER_STATUS_RUNNING,
     WORKER_TYPE_DOCKER,
     WORKER_TYPE_KUBERNETES,
@@ -35,20 +32,24 @@ class WorkerRegistry:
         self._build_workers()
 
     def _build_workers(self) -> None:
-        from .workers.not_implemented import NotImplementedWorker  # noqa: PLC0415
-        from .workers.process import ProcessWorker  # noqa: PLC0415
-        from .workers.remote import RemoteWorker  # noqa: PLC0415
+        from homeassistant.worker.workers.not_implemented import (
+            NotImplementedWorker,  # noqa: PLC0415
+        )
+        from homeassistant.worker.workers.process import ProcessWorker  # noqa: PLC0415
+        from homeassistant.worker.workers.remote import RemoteWorker  # noqa: PLC0415
 
         for conf in self._conf:
-            name = conf[CONF_WORKER_NAME]
-            worker_type = conf[CONF_WORKER_TYPE]
+            name = conf["name"]
+            worker_type = conf["type"]
 
             if worker_type == WORKER_TYPE_PROCESS:
                 worker = ProcessWorker(self._hass, conf)
             elif worker_type == WORKER_TYPE_REMOTE:
                 worker = RemoteWorker(self._hass, conf)
             elif worker_type == WORKER_TYPE_DOCKER:
-                from .workers.docker import DockerWorker  # noqa: PLC0415
+                from homeassistant.worker.workers.docker import (
+                    DockerWorker,  # noqa: PLC0415
+                )
 
                 worker = DockerWorker(self._hass, conf)
             elif worker_type == WORKER_TYPE_KUBERNETES:

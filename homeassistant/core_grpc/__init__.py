@@ -25,12 +25,12 @@ def _import_grpc_modules() -> None:
     import grpc
     import grpc.aio  # noqa: F401
 
-    from homeassistant.grpc.protos import (
+    from homeassistant.core_grpc.protos import (
         core_pb2,  # noqa: F401
         core_pb2_grpc,  # noqa: F401
     )
-    from homeassistant.grpc.server import CoreGrpcServer  # noqa: F401
-    from homeassistant.grpc.services.state_service import (
+    from homeassistant.core_grpc.server import CoreGrpcServer  # noqa: F401
+    from homeassistant.core_grpc.services.state_service import (
         CoreServiceServicer,  # noqa: F401
     )
 

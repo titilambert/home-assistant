@@ -91,7 +91,7 @@ async def async_setup_remote(
                 return False
 
         # Send SetupEntry to the worker via gRPC so it loads the integration.
-        from homeassistant.grpc.worker_client import WorkerClient
+        from homeassistant.core_grpc.worker_client import WorkerClient
 
         client = WorkerClient(entry.entry_id, worker_address)
         await client.connect()
@@ -123,7 +123,7 @@ async def async_setup_remote(
         worker_addresses[entry.entry_id] = worker_address
 
         # Store client in DATA_WORKER_CLIENTS for service routing
-        from homeassistant.grpc.services.state_service import DATA_WORKER_CLIENTS
+        from homeassistant.core_grpc.services.state_service import DATA_WORKER_CLIENTS
 
         clients: dict = hass.data.setdefault(DATA_WORKER_CLIENTS, {})
         clients[entry.entry_id] = client

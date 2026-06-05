@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 
-from ..const import CONF_WORKER_TYPE, WORKER_STATUS_NOT_IMPLEMENTED
-from .base import BaseWorker
+from homeassistant.worker.const import WORKER_STATUS_NOT_IMPLEMENTED
+from homeassistant.worker.workers.base import BaseWorker
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class NotImplementedWorker(BaseWorker):
         _LOGGER.warning(
             "Worker '%s' type '%s' is not yet implemented (Phase 4/5). Skipping.",
             self._name,
-            self._conf[CONF_WORKER_TYPE],
+            self._conf["type"],
         )
 
     async def async_stop(self) -> None:

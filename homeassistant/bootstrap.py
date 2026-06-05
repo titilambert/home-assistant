@@ -470,7 +470,7 @@ async def async_load_base_functionality(hass: core.HomeAssistant) -> bool:
     # Horizontal scaling POC: start Core gRPC server early so remote integrations
     # can connect as soon as config entries are set up.
     try:
-        from homeassistant.grpc import async_start_grpc_server
+        from homeassistant.core_grpc import async_start_grpc_server
 
         await async_start_grpc_server(hass)
     except Exception:  # noqa: BLE001
@@ -535,6 +535,18 @@ async def async_from_config_dict(
 
     if not await async_load_base_functionality(hass):
         return None
+
+    # Horizontal scaling: load workers from configuration.yaml if declared.
+    try:
+        from homeassistant.worker.config import (  # noqa: PLC0415
+            DOMAIN as _hs_domain,
+            async_setup_workers,
+        )
+
+        if _hs_domain in config:
+            await async_setup_workers(hass, config)
+    except Exception:  # noqa: BLE001
+        _LOGGER.warning("Failed to set up horizontal scaling workers", exc_info=True)
 
     # Set up core.
     _LOGGER.debug("Setting up %s", CORE_INTEGRATIONS)

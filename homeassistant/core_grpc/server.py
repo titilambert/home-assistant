@@ -11,8 +11,8 @@ import grpc.aio
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from homeassistant.grpc.protos import core_pb2_grpc
-from homeassistant.grpc.services.state_service import CoreServiceServicer
+from homeassistant.core_grpc.protos import core_pb2_grpc
+from homeassistant.core_grpc.services.state_service import CoreServiceServicer
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from homeassistant.core import callback
-from homeassistant.grpc.protos import core_pb2, core_pb2_grpc
+from homeassistant.core_grpc.protos import core_pb2, core_pb2_grpc
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -513,7 +513,7 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
 
     async def RegisterWorker(self, request, context):
         """Register a remote worker and store its gRPC client in hass.data."""
-        from homeassistant.grpc.worker_client import WorkerClient
+        from homeassistant.core_grpc.worker_client import WorkerClient
 
         entry_id = request.entry_id
         worker_address = request.worker_address

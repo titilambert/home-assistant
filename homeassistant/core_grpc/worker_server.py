@@ -9,7 +9,7 @@ from typing import Any
 import grpc
 import grpc.aio
 
-from homeassistant.grpc.protos import core_pb2, core_pb2_grpc
+from homeassistant.core_grpc.protos import core_pb2, core_pb2_grpc
 
 _LOGGER = logging.getLogger(__name__)
 

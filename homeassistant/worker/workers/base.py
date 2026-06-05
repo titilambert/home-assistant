@@ -9,12 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from ..const import (
-    CONF_WORKER_MAX_INTEGRATIONS,
-    CONF_WORKER_NAME,
-    CONF_WORKER_TYPE,
-    WORKER_STATUS_UNAVAILABLE,
-)
+from homeassistant.worker.const import WORKER_STATUS_UNAVAILABLE
 
 
 class BaseWorker(ABC):
@@ -23,9 +18,9 @@ class BaseWorker(ABC):
     def __init__(self, hass: HomeAssistant, conf: dict) -> None:
         self._hass = hass
         self._conf = conf
-        self._name: str = conf[CONF_WORKER_NAME]
-        self._worker_type: str = conf[CONF_WORKER_TYPE]
-        self._max_integrations: int | None = conf.get(CONF_WORKER_MAX_INTEGRATIONS)
+        self._name: str = conf["name"]
+        self._worker_type: str = conf["type"]
+        self._max_integrations: int | None = conf.get("max_integrations")
         self._status: str = WORKER_STATUS_UNAVAILABLE
         self._active_integrations: int = 0
         self._address: str = ""  # gRPC address, set by subclasses

@@ -6,8 +6,8 @@ import asyncio
 import logging
 import sys
 
-from ..const import CONF_WORKER_PORT, WORKER_STATUS_RUNNING, WORKER_STATUS_UNAVAILABLE
-from .base import BaseWorker
+from homeassistant.worker.const import WORKER_STATUS_RUNNING, WORKER_STATUS_UNAVAILABLE
+from homeassistant.worker.workers.base import BaseWorker
 
 _LOGGER = logging.getLogger(__name__)
 RETRY_INTERVAL = 30  # seconds
@@ -18,7 +18,7 @@ class ProcessWorker(BaseWorker):
 
     def __init__(self, hass, conf: dict) -> None:
         super().__init__(hass, conf)
-        self._port: int = conf[CONF_WORKER_PORT]
+        self._port: int = conf["port"]
         self._address = f"localhost:{self._port}"
         self._process: asyncio.subprocess.Process | None = None
         self._stdout_task: asyncio.Task | None = None

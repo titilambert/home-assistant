@@ -23,7 +23,7 @@ class WorkerClient:
 
     async def connect(self) -> None:
         """Open the gRPC channel and create the stub."""
-        from homeassistant.grpc.protos import core_pb2_grpc
+        from homeassistant.core_grpc.protos import core_pb2_grpc
 
         self._channel = grpc.aio.insecure_channel(self.worker_address)
         self._stub = core_pb2_grpc.WorkerServiceStub(self._channel)
@@ -44,7 +44,7 @@ class WorkerClient:
 
         Returns True on success, False on any error.
         """
-        from homeassistant.grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2
 
         if self._stub is None:
             _LOGGER.error(
@@ -94,7 +94,7 @@ class WorkerClient:
 
     async def setup_entry(self, entry_id: str) -> bool:
         """Ask the worker to load an integration."""
-        from homeassistant.grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2
 
         if self._stub is None:
             _LOGGER.error(
@@ -112,7 +112,7 @@ class WorkerClient:
 
     async def teardown_entry(self, entry_id: str) -> bool:
         """Ask the worker to unload an integration."""
-        from homeassistant.grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2
 
         if self._stub is None:
             return False

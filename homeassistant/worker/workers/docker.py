@@ -10,19 +10,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from ..const import (
-    CONF_WORKER_HOST,
-    CONF_WORKER_IMAGE,
-    CONF_WORKER_PORT,
-    CONF_WORKER_RESOURCES,
-    CONF_WORKER_RESOURCES_CPU,
-    CONF_WORKER_RESOURCES_CPU_SHARES,
-    CONF_WORKER_RESOURCES_MEMORY,
-    CONF_WORKER_STOP_ON_SHUTDOWN,
-    WORKER_STATUS_RUNNING,
-    WORKER_STATUS_UNAVAILABLE,
-)
-from .base import BaseWorker
+from homeassistant.worker.const import WORKER_STATUS_RUNNING, WORKER_STATUS_UNAVAILABLE
+from homeassistant.worker.workers.base import BaseWorker
 
 _LOGGER = logging.getLogger(__name__)
 RETRY_INTERVAL = 30  # seconds
@@ -39,11 +28,11 @@ class DockerWorker(BaseWorker):
     def __init__(self, hass: HomeAssistant, conf: dict) -> None:
         """Initialize the Docker worker."""
         super().__init__(hass, conf)
-        self._docker_host: str = conf[CONF_WORKER_HOST]
-        self._image: str = conf[CONF_WORKER_IMAGE]
-        self._port: int = conf[CONF_WORKER_PORT]
-        self._resources: dict = conf.get(CONF_WORKER_RESOURCES, {})
-        self._stop_on_shutdown: bool = conf.get(CONF_WORKER_STOP_ON_SHUTDOWN, True)
+        self._docker_host: str = conf["host"]
+        self._image: str = conf["image"]
+        self._port: int = conf["port"]
+        self._resources: dict = conf.get("resources", {})
+        self._stop_on_shutdown: bool = conf.get("stop_on_shutdown", True)
         self._container_name: str = _sanitize_name(self._name)
         self._stopping = False
         self._retry_task: asyncio.Task | None = None
@@ -136,14 +125,12 @@ class DockerWorker(BaseWorker):
             }
 
             resources = self._resources
-            if resources.get(CONF_WORKER_RESOURCES_CPU):
-                kwargs["nano_cpus"] = int(
-                    float(resources[CONF_WORKER_RESOURCES_CPU]) * 1e9
-                )
-            if resources.get(CONF_WORKER_RESOURCES_MEMORY):
-                kwargs["mem_limit"] = resources[CONF_WORKER_RESOURCES_MEMORY]
-            if resources.get(CONF_WORKER_RESOURCES_CPU_SHARES):
-                kwargs["cpu_shares"] = resources[CONF_WORKER_RESOURCES_CPU_SHARES]
+            if resources.get("cpu"):
+                kwargs["nano_cpus"] = int(float(resources["cpu"]) * 1e9)
+            if resources.get("memory"):
+                kwargs["mem_limit"] = resources["memory"]
+            if resources.get("cpu_shares"):
+                kwargs["cpu_shares"] = resources["cpu_shares"]
 
             _LOGGER.info(
                 "Starting Docker container '%s' from image '%s' on port %d",

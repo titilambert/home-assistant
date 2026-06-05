@@ -9,12 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from ..const import (
-    CONF_WORKER_ADDRESS,
-    WORKER_STATUS_RUNNING,
-    WORKER_STATUS_UNAVAILABLE,
-)
-from .base import BaseWorker
+from homeassistant.worker.const import WORKER_STATUS_RUNNING, WORKER_STATUS_UNAVAILABLE
+from homeassistant.worker.workers.base import BaseWorker
 
 _LOGGER = logging.getLogger(__name__)
 RETRY_INTERVAL = 30
@@ -25,7 +21,7 @@ class RemoteWorker(BaseWorker):
 
     def __init__(self, hass, conf: dict) -> None:
         super().__init__(hass, conf)
-        self._address = conf[CONF_WORKER_ADDRESS]
+        self._address = conf["address"]
         self._retry_task: asyncio.Task | None = None
         self._stopping = False
 

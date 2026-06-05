@@ -5,7 +5,7 @@
 
 import grpc
 
-from homeassistant.grpc.protos import core_pb2 as core__pb2
+from homeassistant.core_grpc.protos import core_pb2 as core__pb2
 
 GRPC_GENERATED_VERSION = "1.80.0"
 # Minimum version actually required at runtime (features used are available

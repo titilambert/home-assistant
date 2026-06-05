@@ -68,7 +68,7 @@ class _MinimalConfigEntry:
 
 async def _setup_integration(hass, stub, entry_id: str) -> _MinimalConfigEntry | None:
     """Fetch config from Core and set up one integration."""
-    from homeassistant.grpc.protos import core_pb2
+    from homeassistant.core_grpc.protos import core_pb2
 
     _LOGGER.info("Fetching config for entry_id=%s", entry_id)
     response = await stub.GetEntry(core_pb2.GetEntryRequest(entry_id=entry_id))
@@ -102,7 +102,7 @@ async def _setup_integration(hass, stub, entry_id: str) -> _MinimalConfigEntry |
         return None
 
     # Patch namespace after import
-    from homeassistant.helpers.remote_hass import patch_integration_namespace
+    from homeassistant.worker.proxy import patch_integration_namespace
 
     patch_integration_namespace(module_name)
 
@@ -147,7 +147,7 @@ async def _main(
     )
 
     # Create the shared hass proxy
-    from homeassistant.helpers.remote_hass import HomeAssistantGrpcProxy
+    from homeassistant.worker.proxy import HomeAssistantGrpcProxy
 
     hass = HomeAssistantGrpcProxy(core_address=core_address, entry_id="")
 
@@ -158,14 +158,14 @@ async def _main(
     hass.data[DATA_IN_WORKER] = True
 
     # Start the worker gRPC server
-    from homeassistant.grpc.worker_server import WorkerGrpcServer
+    from homeassistant.core_grpc.worker_server import WorkerGrpcServer
 
     worker_server = WorkerGrpcServer(hass.services, port=worker_port, hass_proxy=hass)
     await worker_server.start()
 
     # Register the worker with Core (persistent mode — no entry_id yet)
     if not entry_ids and worker_name:
-        from homeassistant.grpc.protos import core_pb2 as _pb2
+        from homeassistant.core_grpc.protos import core_pb2 as _pb2
 
         worker_address = f"localhost:{worker_port}"
         try:
@@ -184,7 +184,7 @@ async def _main(
             _LOGGER.warning("Could not register with Core: %s", err)
 
     # Set up each integration
-    from homeassistant.grpc.protos import core_pb2
+    from homeassistant.core_grpc.protos import core_pb2
 
     entries = []
     for entry_id in entry_ids:
