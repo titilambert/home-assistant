@@ -375,12 +375,25 @@ class _MockStore:
         asyncio.create_task(_save())
 
 
+class _MockUnits:
+    """Minimal UnitSystem shim."""
+
+    temperature_unit = "°C"
+    length_unit = "km"
+    mass_unit = "kg"
+    pressure_unit = "hPa"
+    volume_unit = "L"
+    wind_speed_unit = "km/h"
+    accumulated_precipitation_unit = "mm"
+
+
 class _MockConfig:
     """Minimal hass.config shim."""
 
     def __init__(self) -> None:
         self.time_zone = "UTC"
-        self.units = None
+        self.units = _MockUnits()
+        self.language = "en"
         # Some helpers (storage, entity_registry) need config_dir.  We point
         # to a throw-away temp directory — nothing should actually be written
         # there in normal operation because the relevant helpers are patched

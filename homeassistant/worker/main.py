@@ -36,6 +36,7 @@ class _MinimalConfigEntry:
         from homeassistant.config_entries import ConfigEntryState
 
         self.entry_id = entry_id
+        self.unique_id = entry_id  # use entry_id as unique_id for the worker
         self.domain = domain
         self.title = title
         self.data = config

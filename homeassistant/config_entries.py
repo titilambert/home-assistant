@@ -766,25 +766,53 @@ class ConfigEntry[_DataT = Any]:
             with async_start_setup(
                 hass, integration=self.domain, group=self.entry_id, phase=setup_phase
             ):
-                runtime_mode = self.options.get("runtime_mode", "local")
-                if runtime_mode == "remote" and domain_is_integration:
-                    _LOGGER.info(
-                        "Starting %s config entry %s in REMOTE mode via ProcessExecutor",
-                        self.domain,
-                        self.entry_id,
-                    )
-                    from homeassistant.executors.process import ProcessExecutor
+                # Horizontal scaling: check if this entry should run in a remote worker.
+                # This is done at the config_entries level so integrations don't need
+                # to know about the worker infrastructure (zero code change in integrations).
+                from homeassistant.helpers.runtime_factory import (
+                    async_setup_remote,
+                    is_remote,
+                    set_runtime_mode,
+                )
 
-                    executor = ProcessExecutor()
-                    hass.data.setdefault("remote_executors", {})[self.entry_id] = (
-                        executor
+                # Sync runtime_mode from entry.data to hass.data
+                runtime_mode = self.data.get("runtime_mode", "local")
+                set_runtime_mode(hass, self.entry_id, runtime_mode)
+
+                if is_remote(hass, self) and domain_is_integration:
+                    from homeassistant.components.horizontal_scaling.const import (
+                        DATA_WORKER_REGISTRY,
                     )
-                    await executor.start(
-                        domain=self.domain,
-                        entry_id=self.entry_id,
-                        config=dict(self.data),
-                    )
-                    result = True
+
+                    worker_name = self.data.get("worker_name")
+                    registry = hass.data.get(DATA_WORKER_REGISTRY)
+
+                    if registry and worker_name:
+                        worker = registry.get_worker(worker_name)
+                        _LOGGER.debug(
+                            "Horizontal scaling: worker=%s status=%s has_capacity=%s",
+                            worker_name,
+                            worker.status if worker else "not found",
+                            worker.has_capacity if worker else "N/A",
+                        )
+                        if worker and worker.status == "running":
+                            result = await async_setup_remote(
+                                hass,
+                                self,
+                                core_address="localhost:50051",
+                                worker_address=worker.address,
+                                worker=worker,
+                            )
+                        else:
+                            _LOGGER.error(
+                                "Worker '%s' is not available for entry %s",
+                                worker_name,
+                                self.entry_id,
+                            )
+                            result = False
+                    else:
+                        # Fallback: no worker registry → old subprocess behaviour
+                        result = await async_setup_remote(hass, self)
                 else:
                     result = await component.async_setup_entry(hass, self)
 
@@ -3347,6 +3375,49 @@ class ConfigFlow(ConfigEntryBaseFlow):
                 "when it is expected to update an existing entry and abort"
             )
 
+        # Horizontal scaling: if workers are declared and the integration
+        # did not already set a runtime_mode, intercept the flow and show
+        # a worker selection step before creating the entry.
+        if (
+            self.source not in {SOURCE_REAUTH, SOURCE_RECONFIGURE}
+            and "runtime_mode" not in data
+        ):
+            try:
+                from homeassistant.components.horizontal_scaling.const import (
+                    DATA_WORKER_REGISTRY,
+                )
+
+                registry = self.hass.data.get(DATA_WORKER_REGISTRY)
+                available_workers = registry.get_available_workers() if registry else []
+                if available_workers:
+                    # Store pending entry data and redirect to worker selection step
+                    self._hs_pending_entry = {
+                        "title": title,
+                        "data": dict(data),
+                        "description": description,
+                        "description_placeholders": description_placeholders,
+                        "next_flow": next_flow,
+                        "options": options,
+                        "subentries": subentries,
+                    }
+                    self._hs_workers = available_workers
+                    return self.async_show_form(
+                        step_id="hs_worker_selection",
+                        data_schema=vol.Schema(
+                            {
+                                vol.Required("runtime_mode", default="local"): vol.In(
+                                    {"local": "Local — Run in Home Assistant Core"}
+                                    | {
+                                        f"worker:{w.name}": f"Remote — {w.name} ({w.worker_type})"
+                                        for w in available_workers
+                                    }
+                                ),
+                            }
+                        ),
+                    )
+            except Exception:  # noqa: BLE001
+                pass  # horizontal_scaling not loaded — skip
+
         result = super().async_create_entry(
             title=title,
             data=data,
@@ -3361,6 +3432,63 @@ class ConfigFlow(ConfigEntryBaseFlow):
         result["version"] = self.VERSION
 
         return result
+
+    async def async_step_hs_worker_selection(
+        self, user_input: dict | None = None
+    ) -> ConfigFlowResult:
+        """Generic step injected by HA to select a worker for horizontal scaling.
+
+        This step is automatically shown after any config flow's final step
+        when workers are declared in configuration.yaml.
+        """
+        pending = getattr(self, "_hs_pending_entry", None)
+        if pending is None:
+            return self.async_abort(reason="unknown")
+
+        if user_input is not None:
+            choice = user_input["runtime_mode"]
+            data = dict(pending["data"])
+            if choice == "local":
+                data["runtime_mode"] = "local"
+            else:
+                worker_name = choice.split(":", 1)[1]
+                data["runtime_mode"] = "remote"
+                data["worker_name"] = worker_name
+
+            # Build the display title — append worker name for remote entries
+            base_title = pending["title"]
+            if data.get("runtime_mode") == "remote" and data.get("worker_name"):
+                display_title = f"{base_title} \u2022 Remote: {data['worker_name']}"
+            else:
+                display_title = base_title
+
+            return super().async_create_entry(
+                title=display_title,
+                data=data,
+                description=pending["description"],
+                description_placeholders=pending["description_placeholders"],
+            ) | {
+                "minor_version": self.MINOR_VERSION,
+                "options": pending["options"] or {},
+                "subentries": pending["subentries"] or (),
+                "version": self.VERSION,
+            }
+
+        workers = getattr(self, "_hs_workers", [])
+        return self.async_show_form(
+            step_id="hs_worker_selection",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("runtime_mode", default="local"): vol.In(
+                        {"local": "Local — Run in Home Assistant Core"}
+                        | {
+                            f"worker:{w.name}": f"Remote — {w.name} ({w.worker_type})"
+                            for w in workers
+                        }
+                    ),
+                }
+            ),
+        )
 
     @callback
     def __async_update(

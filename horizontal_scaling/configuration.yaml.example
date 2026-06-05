@@ -31,6 +31,9 @@ horizontal_scaling:
       resources:              # optional resource limits
         cpu: "0.5"            # --cpus equivalent
         memory: "256m"        # --memory equivalent
+      stop_on_shutdown: true  # optional, default: true
+                              # false: leave container running when HA stops
+                              # (faster restart — container is reused on next boot)
 
     # -------------------------------------------------------------------------
     # Remote Worker — already running on a remote machine

@@ -4,11 +4,6 @@ from datetime import timedelta
 
 DOMAIN = "pi_hole"
 
-CONF_RUNTIME_MODE = "runtime_mode"
-CONF_WORKER_NAME = "worker_name"
-RUNTIME_MODE_LOCAL = "local"
-RUNTIME_MODE_REMOTE = "remote"
-
 CONF_STATISTICS_ONLY = "statistics_only"
 
 DEFAULT_LOCATION = "admin"

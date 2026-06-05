@@ -21,13 +21,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import (
-    CONF_RUNTIME_MODE,
-    CONF_STATISTICS_ONLY,
-    CONF_WORKER_NAME,
-    DOMAIN,
-    RUNTIME_MODE_REMOTE,
-)
+from .const import CONF_STATISTICS_ONLY, DOMAIN
 from .coordinator import PiHoleConfigEntry, PiHoleData, PiHoleUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,45 +37,6 @@ PLATFORMS = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bool:
     """Set up Pi-hole entry."""
-    # Horizontal scaling: check if this entry should run in a remote worker
-    from homeassistant.helpers.runtime_factory import (
-        async_setup_remote,
-        is_remote,
-        set_runtime_mode,
-    )
-
-    # Sync runtime mode from entry.data to hass.data
-    runtime_mode = entry.data.get(CONF_RUNTIME_MODE, "local")
-    set_runtime_mode(hass, entry.entry_id, runtime_mode)
-
-    if is_remote(hass, entry):
-        from homeassistant.components.horizontal_scaling.const import (
-            DATA_WORKER_REGISTRY,
-        )
-
-        worker_name = entry.data.get(CONF_WORKER_NAME)
-        registry = hass.data.get(DATA_WORKER_REGISTRY)
-
-        if registry and worker_name:
-            worker = registry.get_worker(worker_name)
-            if worker and worker.status == "running":
-                return await async_setup_remote(
-                    hass,
-                    entry,
-                    core_address="localhost:50051",
-                    worker_address=worker.address,
-                    worker=worker,
-                )
-            _LOGGER.error(
-                "Worker '%s' is not available for entry %s",
-                worker_name,
-                entry.entry_id,
-            )
-            return False
-
-        # Fallback: no worker registry or no worker name → old subprocess behaviour
-        return await async_setup_remote(hass, entry)
-
     host = entry.data[CONF_HOST]
 
     # remove obsolet CONF_STATISTICS_ONLY from entry.data
@@ -150,29 +105,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload Pi-hole entry."""
-    from homeassistant.helpers.runtime_factory import async_teardown_remote, is_remote
-
-    if is_remote(hass, entry):
-        # In REMOTE mode the platforms run inside the worker process, not in Core.
-        # Calling async_unload_platforms here would fail because the EntityComponents
-        # for binary_sensor/sensor/switch/update were never registered in Core.
-        # The ProcessExecutor is stopped via the async_on_unload callback registered
-        # in async_setup_remote(), so we just need to clean up the executor reference.
-        result = await async_teardown_remote(hass, entry)
-
-        # Remove all states that were pushed by the remote worker so they don't
-        # linger in the UI after the integration is removed.
-        import homeassistant.helpers.entity_registry as er_module
-
-        entity_registry = er_module.async_get(hass)
-        remote_entities = er_module.async_entries_for_config_entry(
-            entity_registry, entry.entry_id
-        )
-        for er_entry in remote_entities:
-            hass.states.async_remove(er_entry.entity_id)
-
-        return result
-
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

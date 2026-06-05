@@ -18,6 +18,7 @@ from ..const import (
     CONF_WORKER_RESOURCES_CPU,
     CONF_WORKER_RESOURCES_CPU_SHARES,
     CONF_WORKER_RESOURCES_MEMORY,
+    CONF_WORKER_STOP_ON_SHUTDOWN,
     WORKER_STATUS_RUNNING,
     WORKER_STATUS_UNAVAILABLE,
 )
@@ -42,6 +43,7 @@ class DockerWorker(BaseWorker):
         self._image: str = conf[CONF_WORKER_IMAGE]
         self._port: int = conf[CONF_WORKER_PORT]
         self._resources: dict = conf.get(CONF_WORKER_RESOURCES, {})
+        self._stop_on_shutdown: bool = conf.get(CONF_WORKER_STOP_ON_SHUTDOWN, True)
         self._container_name: str = _sanitize_name(self._name)
         self._stopping = False
         self._retry_task: asyncio.Task | None = None
@@ -76,11 +78,18 @@ class DockerWorker(BaseWorker):
         """Stop any existing container and start a fresh one."""
         self._stopping = False
         await self._hass.async_add_executor_job(self._start_sync)
-        # Schedule monitoring and retry from the event loop (not from executor thread)
-        if self._status == WORKER_STATUS_RUNNING:
-            self._monitor_task = asyncio.create_task(self._monitor())
-        elif not self._stopping:
-            self._schedule_retry()
+        if self._status != WORKER_STATUS_RUNNING:
+            if not self._stopping:
+                self._schedule_retry()
+            return
+        # Container started — wait for the gRPC worker inside to be reachable
+        self._status = WORKER_STATUS_UNAVAILABLE
+        _LOGGER.info(
+            "Docker worker '%s' container started, waiting for gRPC port %d...",
+            self._name,
+            self._port,
+        )
+        asyncio.create_task(self._wait_for_ready())
 
     def _start_sync(self) -> None:
         """Synchronous Docker operations (run in executor)."""
@@ -88,17 +97,29 @@ class DockerWorker(BaseWorker):
             client = self._get_docker_client()
             self._client = client
 
-            # Stop existing container if present (keep it for debug inspection)
+            # Check if container already exists
+            existing = None
             try:
                 existing = client.containers.get(self._container_name)
-                _LOGGER.info(
-                    "Stopping existing Docker container '%s'", self._container_name
-                )
-                existing.stop(timeout=10)
-                existing.remove()  # must remove so we can recreate with same name
-                _LOGGER.info("Stopped and removed container '%s'", self._container_name)
             except Exception:  # noqa: BLE001
-                pass  # Container does not exist — that's fine
+                pass  # Container does not exist
+
+            if existing is not None:
+                existing.reload()
+                if existing.status == "running":
+                    # Container is already running — reuse it
+                    _LOGGER.info(
+                        "Docker worker '%s' container already running, reusing it",
+                        self._container_name,
+                    )
+                    self._status = WORKER_STATUS_RUNNING
+                    return
+                else:
+                    # Container exists but stopped — remove it and recreate
+                    _LOGGER.info(
+                        "Removing stopped container '%s'", self._container_name
+                    )
+                    existing.remove()
 
             # Build resource limits
             kwargs: dict = {
@@ -143,8 +164,40 @@ class DockerWorker(BaseWorker):
             )
 
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("Failed to start Docker worker '%s': %s", self._name, err)
+            _LOGGER.error(
+                "Failed to start Docker worker '%s': %s",
+                self._name,
+                err,
+                exc_info=True,
+            )
             self._status = WORKER_STATUS_UNAVAILABLE
+
+    async def _wait_for_ready(self, timeout: int = 60, interval: float = 2.0) -> None:
+        """Poll until the gRPC port is reachable, then mark RUNNING."""
+        import time
+
+        deadline = time.monotonic() + timeout
+        while not self._stopping and time.monotonic() < deadline:
+            reachable = await self.async_check_reachable()
+            if reachable:
+                self._status = WORKER_STATUS_RUNNING
+                _LOGGER.info(
+                    "Docker worker '%s' is ready at %s",
+                    self._name,
+                    self._address,
+                )
+                self._monitor_task = asyncio.create_task(self._monitor())
+                return
+            await asyncio.sleep(interval)
+
+        if not self._stopping:
+            _LOGGER.error(
+                "Docker worker '%s' did not become ready within %ds",
+                self._name,
+                timeout,
+            )
+            self._status = WORKER_STATUS_UNAVAILABLE
+            self._schedule_retry()
 
     async def _monitor(self) -> None:
         """Monitor the container and retry if it crashes."""
@@ -193,7 +246,14 @@ class DockerWorker(BaseWorker):
         self._stopping = True
         if self._retry_task:
             self._retry_task.cancel()
-        await self._hass.async_add_executor_job(self._stop_sync)
+        if self._stop_on_shutdown:
+            await self._hass.async_add_executor_job(self._stop_sync)
+        else:
+            _LOGGER.info(
+                "Docker worker '%s' stop_on_shutdown=false — leaving container running",
+                self._name,
+            )
+            self._status = WORKER_STATUS_UNAVAILABLE
 
     def _stop_sync(self) -> None:
         """Stop the container synchronously (run in executor)."""

@@ -61,17 +61,43 @@ class ProcessWorker(BaseWorker):
             self._stderr_task = asyncio.create_task(
                 self._stream(self._process.stderr, "stderr")
             )
-            self._status = WORKER_STATUS_RUNNING
             _LOGGER.info(
-                "Process worker '%s' started (pid=%s, port=%s)",
+                "Process worker '%s' started (pid=%s, port=%s), waiting for gRPC...",
                 self._name,
                 self._process.pid,
                 self._port,
             )
-            # Monitor process and retry on crash
-            asyncio.create_task(self._monitor())
+            # Wait for gRPC port to be ready before marking RUNNING
+            asyncio.create_task(self._wait_for_ready())
         except Exception as err:
             _LOGGER.error("Failed to start process worker '%s': %s", self._name, err)
+            self._status = WORKER_STATUS_UNAVAILABLE
+            self._schedule_retry()
+
+    async def _wait_for_ready(self, timeout: int = 60, interval: float = 1.0) -> None:
+        """Poll until the gRPC port is reachable, then mark RUNNING."""
+        import time
+
+        deadline = time.monotonic() + timeout
+        while not self._stopping and time.monotonic() < deadline:
+            reachable = await self.async_check_reachable()
+            if reachable:
+                self._status = WORKER_STATUS_RUNNING
+                _LOGGER.info(
+                    "Process worker '%s' is ready on port %s",
+                    self._name,
+                    self._port,
+                )
+                asyncio.create_task(self._monitor())
+                return
+            await asyncio.sleep(interval)
+
+        if not self._stopping:
+            _LOGGER.error(
+                "Process worker '%s' did not become ready within %ds",
+                self._name,
+                timeout,
+            )
             self._status = WORKER_STATUS_UNAVAILABLE
             self._schedule_retry()
 

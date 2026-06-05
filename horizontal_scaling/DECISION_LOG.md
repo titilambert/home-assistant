@@ -985,7 +985,8 @@ The config flow runs in the Core as it does today. Once the flow is complete and
 
 **Key decisions:**
 - `process` workers: permanent subprocess started at HA startup (not on-demand per integration)
-- `docker` workers: always recreated at startup (stop existing + create new) — no state reuse
+- `docker` workers: smart lifecycle at startup — reuse if running, remove+recreate if stopped, create if absent
+  - **Rationale (Option B → revised):** always recreating a running container caused timing issues (worker not ready). Reusing an existing running container is more robust and avoids service interruptions on HA restart.
 - `remote` workers: HA only connects, never manages lifecycle
 - `kubernetes` workers: in-cluster only (ClusterIP Service), always recreated at startup
 - Docker `worker_address` auto-deduced from `host` IP + `port`

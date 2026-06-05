@@ -22,15 +22,11 @@ from homeassistant.const import (
 
 from . import Hole, api_by_version, determine_api_version
 from .const import (
-    CONF_RUNTIME_MODE,
-    CONF_WORKER_NAME,
     DEFAULT_LOCATION,
     DEFAULT_NAME,
     DEFAULT_SSL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
-    RUNTIME_MODE_LOCAL,
-    RUNTIME_MODE_REMOTE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,7 +40,6 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._config: dict = {}
-        self._runtime_mode: str = RUNTIME_MODE_LOCAL
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -76,7 +71,9 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
             if not (errors := await self._async_try_connect()):
                 if self._api_version is not None:
                     self._config["api_version"] = self._api_version
-                return await self.async_step_runtime()
+                return self.async_create_entry(
+                    title=self._config[CONF_NAME], data=self._config
+                )
 
         user_input = user_input or {}
         return self.async_show_form(
@@ -109,61 +106,6 @@ class PiHoleFlowHandler(ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-        )
-
-    async def async_step_runtime(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Ask the user where to run this integration."""
-        from homeassistant.components.horizontal_scaling.const import (
-            DATA_WORKER_REGISTRY,
-        )
-
-        registry = self.hass.data.get(DATA_WORKER_REGISTRY)
-        available_workers = registry.get_available_workers() if registry else []
-
-        # No workers declared → skip this step and go LOCAL
-        if not available_workers:
-            return self.async_create_entry(
-                title=self._config[CONF_NAME],
-                data={**self._config, CONF_RUNTIME_MODE: RUNTIME_MODE_LOCAL},
-            )
-
-        if user_input is not None:
-            choice = user_input[CONF_RUNTIME_MODE]
-            if choice == RUNTIME_MODE_LOCAL:
-                data = {**self._config, CONF_RUNTIME_MODE: RUNTIME_MODE_LOCAL}
-            else:
-                # choice is "worker:{name}"
-                worker_name = choice.split(":", 1)[1]
-                data = {
-                    **self._config,
-                    CONF_RUNTIME_MODE: RUNTIME_MODE_REMOTE,
-                    CONF_WORKER_NAME: worker_name,
-                }
-            return self.async_create_entry(title=self._config[CONF_NAME], data=data)
-
-        # Build options: local + one entry per available worker
-        options: dict[str, str] = {
-            RUNTIME_MODE_LOCAL: "Local — Run in Home Assistant Core"
-        }
-        for worker in available_workers:
-            key = f"worker:{worker.name}"
-            options[key] = f"Remote — {worker.name} ({worker.worker_type})"
-
-        return self.async_show_form(
-            step_id="runtime",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_RUNTIME_MODE,
-                        default=RUNTIME_MODE_LOCAL,
-                    ): vol.In(options),
-                }
-            ),
-            description_placeholders={
-                "worker_count": str(len(available_workers)),
-            },
         )
 
     async def async_step_reauth(
