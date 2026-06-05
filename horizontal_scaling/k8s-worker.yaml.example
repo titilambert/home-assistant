@@ -1,6 +1,6 @@
 # Home Assistant Worker — example Kubernetes manifest
 #
-# This file is used as a template by the horizontal_scaling component.
+# This file is used as a template by HA when a kubernetes worker is declared.
 # HA will override the following fields automatically:
 #   Pod:     metadata.name, metadata.namespace,
 #            spec.containers[0].image,

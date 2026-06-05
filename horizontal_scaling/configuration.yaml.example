@@ -1,10 +1,9 @@
-# Home Assistant Horizontal Scaling — configuration.yaml example
+# Home Assistant Workers — configuration.yaml example
 #
 # Add this to your configuration.yaml to declare workers.
 # See horizontal_scaling/WORKERS.md for full documentation.
 
-horizontal_scaling:
-  workers:
+workers:
 
     # -------------------------------------------------------------------------
     # Process Worker — local subprocess
@@ -86,7 +85,7 @@ horizontal_scaling:
       # Optional: custom manifest (Pod + Service).
       # Write standard K8s YAML — no placeholders needed.
       # Example manifest at horizontal_scaling/k8s-worker.yaml.example
-      manifest: /config/k8s/worker.yaml         # optional
+      manifest: /config/k8s/worker.yaml  # optional
 
       # Optional: additional manifests applied as-is (NetworkPolicy, PDB, etc.)
       # HA does not interpret these — they are applied with the K8s API directly.

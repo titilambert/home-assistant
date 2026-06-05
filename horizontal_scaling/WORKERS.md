@@ -1,7 +1,7 @@
 # Home Assistant Horizontal Scaling — Worker Configuration
 
 This document describes how to declare and configure remote workers in Home Assistant.
-Workers are declared in `configuration.yaml` under the `horizontal_scaling` key.
+Workers are declared in `configuration.yaml` under the `workers` key.
 
 ---
 
@@ -41,13 +41,12 @@ from Core to worker).
 ## Configuration Structure
 
 ```yaml
-horizontal_scaling:
-  workers:
-    - name: "Worker Name"         # unique, human-readable name
-      type: process               # process | docker | remote | kubernetes
-      port: 50052                 # gRPC port the worker listens on
-      max_integrations: 10        # optional, unlimited by default
-      # ... type-specific config
+workers:
+  - name: "Worker Name"         # unique, human-readable name
+    type: process               # process | docker | remote | kubernetes
+    port: 50052                 # gRPC port the worker listens on
+    max_integrations: 10        # optional, unlimited by default
+    # ... type-specific config
 ```
 
 ### Common Fields
@@ -69,12 +68,11 @@ HA launches a local subprocess at startup. The subprocess runs the generic worke
 (`homeassistant.worker.main`) and listens on the specified port.
 
 ```yaml
-horizontal_scaling:
-  workers:
-    - name: "Local Worker"
-      type: process
-      port: 50052
-      max_integrations: 10  # optional
+workers:
+  - name: "Local Worker"
+    type: process
+    port: 50052
+    max_integrations: 10  # optional
 ```
 
 | Field | Required | Default | Description |
@@ -95,18 +93,17 @@ horizontal_scaling:
 HA connects to a Docker daemon and manages a container running the generic worker.
 
 ```yaml
-horizontal_scaling:
-  workers:
-    - name: "NAS Worker"
-      type: docker
-      host: "tcp://192.168.1.50:2375"   # Docker daemon address
-      image: "homeassistant/worker:2024.1"
-      port: 50052
-      max_integrations: 5               # optional
-      resources:                        # optional
-        cpu: "0.5"                      # equivalent to --cpus="0.5"
-        memory: "256m"                  # equivalent to --memory="256m"
-        cpu_shares: 512                 # optional, relative CPU priority
+workers:
+  - name: "NAS Worker"
+    type: docker
+    host: "tcp://192.168.1.50:2375"   # Docker daemon address
+    image: "homeassistant/worker:2024.1"
+    port: 50052
+    max_integrations: 5               # optional
+    resources:                        # optional
+      cpu: "0.5"                      # equivalent to --cpus="0.5"
+      memory: "256m"                  # equivalent to --memory="256m"
+      cpu_shares: 512                 # optional, relative CPU priority
 ```
 
 | Field | Required | Default | Description |
@@ -126,16 +123,16 @@ are available in the worker.
 
 Example using the same image as Core:
 ```yaml
-    - name: "NAS Worker"
-      type: docker
-      host: "tcp://192.168.1.50:2375"
-      image: "ghcr.io/home-assistant/home-assistant:stable"
-      port: 50053
+  - name: "NAS Worker"
+    type: docker
+    host: "tcp://192.168.1.50:2375"
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    port: 50053
 ```
 
 The container is started with `--mode worker` automatically by HA.
 
-For local development, a lightweight `horizontal_scaling/Dockerfile.worker` is available.
+For local development, a lightweight `worker/Dockerfile.worker` is available.
 
 **Behavior:**
 - At HA startup: any existing container with the same name is stopped and removed,
@@ -150,11 +147,11 @@ For local development, a lightweight `horizontal_scaling/Dockerfile.worker` is a
 
 **Docker socket example (local):**
 ```yaml
-    - name: "Local Docker Worker"
-      type: docker
-      host: "unix:///var/run/docker.sock"
-      image: "homeassistant/worker:2024.1"
-      port: 50052
+  - name: "Local Docker Worker"
+    type: docker
+    host: "unix:///var/run/docker.sock"
+    image: "homeassistant/worker:2024.1"
+    port: 50052
 ```
 
 ---
@@ -165,12 +162,11 @@ HA connects to an already-running worker on a remote machine. HA does not manage
 the worker lifecycle — it only establishes a gRPC connection.
 
 ```yaml
-horizontal_scaling:
-  workers:
-    - name: "RPi Garage"
-      type: remote
-      address: "192.168.1.100:50052"    # gRPC address of the running worker
-      max_integrations: 3               # optional
+workers:
+  - name: "RPi Garage"
+    type: remote
+    address: "192.168.1.100:50052"    # gRPC address of the running worker
+    max_integrations: 3               # optional
 ```
 
 | Field | Required | Default | Description |
@@ -216,33 +212,32 @@ HA creates a Pod and a ClusterIP Service in the specified namespace.
 Only **in-cluster** mode is supported by default.
 
 ```yaml
-horizontal_scaling:
-  workers:
-    - name: "K8s Worker"
-      type: kubernetes
-      # Authentication — choose one:
-      incluster: true                    # HA runs inside K8s (uses pod service account)
-      # kubeconfig: /config/k8s.yaml    # HA runs outside K8s
+workers:
+  - name: "K8s Worker"
+    type: kubernetes
+    # Authentication — choose one:
+    incluster: true                    # HA runs inside K8s (uses pod service account)
+    # kubeconfig: /config/k8s.yaml    # HA runs outside K8s
 
-      namespace: homeassistant
-      image: "homeassistant/home-assistant:local"
-      port: 50052
-      max_integrations: 20              # optional, unlimited by default
+    namespace: homeassistant
+    image: "homeassistant/home-assistant:local"
+    port: 50052
+    max_integrations: 20              # optional, unlimited by default
 
-      # Optional: path to a custom manifest (Pod + Service).
-      # If omitted, HA generates a minimal default manifest.
-      # HA will override the following fields regardless of what is in the manifest:
-      #   Pod:     metadata.name, metadata.namespace, spec.containers[0].image,
-      #            spec.containers[0].env (HA_MODE, HA_WORKER_CORE_ADDRESS,
-      #            HA_WORKER_PORT, HA_WORKER_NAME are added/merged)
-      #   Service: metadata.name, metadata.namespace, spec.selector, spec.ports[0].port
-      # Everything else (labels, annotations, nodeSelector, tolerations, affinity,
-      # resources, volumes, etc.) is preserved from the manifest.
-      manifest: /config/k8s/worker.yaml
+    # Optional: path to a custom manifest (Pod + Service).
+    # If omitted, HA generates a minimal default manifest.
+    # HA will override the following fields regardless of what is in the manifest:
+    #   Pod:     metadata.name, metadata.namespace, spec.containers[0].image,
+    #            spec.containers[0].env (HA_MODE, HA_WORKER_CORE_ADDRESS,
+    #            HA_WORKER_PORT, HA_WORKER_NAME are added/merged)
+    #   Service: metadata.name, metadata.namespace, spec.selector, spec.ports[0].port
+    # Everything else (labels, annotations, nodeSelector, tolerations, affinity,
+    # resources, volumes, etc.) is preserved from the manifest.
+    manifest: /config/k8s/worker.yaml
 
-      # Optional: additional K8s manifests applied as-is (NetworkPolicy, PDB, Ingress, etc.)
-      extra_manifests:
-        - /config/k8s/worker-networkpolicy.yaml
+    # Optional: additional K8s manifests applied as-is (NetworkPolicy, PDB, Ingress, etc.)
+    extra_manifests:
+      - /config/k8s/worker-networkpolicy.yaml
 ```
 
 **Example manifest** (`/config/k8s/worker.yaml`):
@@ -319,7 +314,7 @@ spec:
 
 ### No workers declared
 
-If `horizontal_scaling.workers` is empty or absent, the config flow does **not**
+If `workers` is empty or absent, the config flow does **not**
 offer a LOCAL/REMOTE choice. All integrations run locally (default HA behavior,
 no change).
 
@@ -428,7 +423,7 @@ Kubernetes worker:
 ERROR: Kubernetes worker "K8s Worker" disabled — missing RBAC permissions.
 Required: pods [get list watch create delete], services [get list create delete]
 in namespace "homeassistant".
-See horizontal_scaling/WORKERS.md for the required RBAC manifest.
+See worker/WORKERS.md for the required RBAC manifest.
 ```
 
 ---
@@ -436,38 +431,37 @@ See horizontal_scaling/WORKERS.md for the required RBAC manifest.
 ## Full Example
 
 ```yaml
-horizontal_scaling:
-  workers:
-    # Local subprocess worker
-    - name: "Local Worker"
-      type: process
-      port: 50052
-      max_integrations: 5
+workers:
+  # Local subprocess worker
+  - name: "Local Worker"
+    type: process
+    port: 50052
+    max_integrations: 5
 
-    # Docker worker on a NAS
-    - name: "NAS Worker"
-      type: docker
-      host: "tcp://192.168.1.50:2375"
-      image: "homeassistant/worker:2024.1"
-      port: 50053
-      max_integrations: 10
-      resources:
-        cpu: "0.5"
-        memory: "512m"
+  # Docker worker on a NAS
+  - name: "NAS Worker"
+    type: docker
+    host: "tcp://192.168.1.50:2375"
+    image: "homeassistant/worker:2024.1"
+    port: 50053
+    max_integrations: 10
+    resources:
+      cpu: "0.5"
+      memory: "512m"
 
-    # Already-running worker on a Raspberry Pi
-    - name: "RPi Garage"
-      type: remote
-      address: "192.168.1.100:50054"
-      max_integrations: 3
+  # Already-running worker on a Raspberry Pi
+  - name: "RPi Garage"
+    type: remote
+    address: "192.168.1.100:50054"
+    max_integrations: 3
 
-    # In-cluster Kubernetes worker
-    - name: "K8s Worker"
-      type: kubernetes
-      incluster: true
-      namespace: "homeassistant"
-      image: "homeassistant/home-assistant:local"
-      port: 50055
-      max_integrations: 20
-      manifest: /config/k8s/worker.yaml
+  # In-cluster Kubernetes worker
+  - name: "K8s Worker"
+    type: kubernetes
+    incluster: true
+    namespace: "homeassistant"
+    image: "homeassistant/home-assistant:local"
+    port: 50055
+    max_integrations: 20
+    manifest: /config/k8s/worker.yaml
 ```

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "horizontal_scaling"
+DOMAIN = "workers"
 
 CONF_WORKERS = "workers"
 CONF_WORKER_NAME = "name"
@@ -110,13 +110,9 @@ def _validate_worker(worker: dict) -> dict:
 
 CONFIG_SCHEMA = vol.Schema(
     {
-        DOMAIN: vol.Schema(
-            {
-                vol.Optional(CONF_WORKERS, default=[]): vol.All(
-                    cv.ensure_list,
-                    [_validate_worker],
-                ),
-            }
+        DOMAIN: vol.All(
+            cv.ensure_list,
+            [_validate_worker],
         ),
     },
     extra=vol.ALLOW_EXTRA,
@@ -127,8 +123,7 @@ async def async_setup_workers(hass: HomeAssistant, config: dict) -> None:
     """Set up workers from configuration."""
     from .registry import WorkerRegistry  # noqa: PLC0415
 
-    conf = config.get(DOMAIN, {})
-    workers_conf: list[dict] = conf.get(CONF_WORKERS, [])
+    workers_conf: list[dict] = config.get(DOMAIN, [])
 
     if not workers_conf:
         return

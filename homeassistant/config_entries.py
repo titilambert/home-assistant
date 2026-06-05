@@ -780,9 +780,7 @@ class ConfigEntry[_DataT = Any]:
                 set_runtime_mode(hass, self.entry_id, runtime_mode)
 
                 if is_remote(hass, self) and domain_is_integration:
-                    from homeassistant.components.horizontal_scaling.const import (
-                        DATA_WORKER_REGISTRY,
-                    )
+                    from homeassistant.worker.const import DATA_WORKER_REGISTRY
 
                     worker_name = self.data.get("worker_name")
                     registry = hass.data.get(DATA_WORKER_REGISTRY)
@@ -3383,9 +3381,7 @@ class ConfigFlow(ConfigEntryBaseFlow):
             and "runtime_mode" not in data
         ):
             try:
-                from homeassistant.components.horizontal_scaling.const import (
-                    DATA_WORKER_REGISTRY,
-                )
+                from homeassistant.worker.const import DATA_WORKER_REGISTRY
 
                 registry = self.hass.data.get(DATA_WORKER_REGISTRY)
                 available_workers = registry.get_available_workers() if registry else []
