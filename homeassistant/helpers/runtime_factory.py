@@ -11,9 +11,6 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# hass.data key storing {entry_id: ProcessExecutor}
-DATA_EXECUTORS = "runtime_executors"
-
 # hass.data key storing {entry_id: worker_address} for registry-managed workers
 DATA_WORKER_ADDRESSES = "runtime_worker_addresses"
 
@@ -155,45 +152,18 @@ async def async_setup_remote(
         )
         return True
 
-    # Legacy path: launch a subprocess via ProcessExecutor.
-    from homeassistant.executors.process import ProcessExecutor
-
-    executors: dict[str, ProcessExecutor] = hass.data.setdefault(DATA_EXECUTORS, {})
-
-    # Stop existing executor if any (e.g. on reload)
-    existing = executors.get(entry.entry_id)
-    if existing is not None:
-        _LOGGER.debug("Stopping existing executor for entry_id=%s", entry.entry_id)
-        await existing.stop()
-
-    executor = ProcessExecutor()
-    await executor.start(
-        entry_ids=[entry.entry_id],
-        core_address=core_address,
-        worker_port=worker_port,
-    )
-    executors[entry.entry_id] = executor
-
-    # Register cleanup on entry unload
-    async def _stop_executor() -> None:
-        await executor.stop()
-        executors.pop(entry.entry_id, None)
-
-    entry.async_on_unload(_stop_executor)
-
-    _LOGGER.info(
-        "Remote worker (subprocess) started for entry_id=%s (domain=%s)",
+    # No worker_address provided and no registry-managed worker found.
+    _LOGGER.error(
+        "Cannot set up entry_id=%s (domain=%s) in REMOTE mode: "
+        "no worker address provided. Declare a worker in configuration.yaml "
+        "under horizontal_scaling.workers.",
         entry.entry_id,
         entry.domain,
     )
-    return True
+    return False
 
 
 async def async_teardown_remote(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Stop the ProcessExecutor for the given config entry."""
-    executors: dict = hass.data.get(DATA_EXECUTORS, {})
-    executor = executors.pop(entry.entry_id, None)
-    if executor is not None:
-        await executor.stop()
-        _LOGGER.info("Remote worker stopped for entry_id=%s", entry.entry_id)
+    """Teardown a remote worker entry (cleanup only, worker lifecycle managed by registry)."""
+    _LOGGER.info("Remote entry teardown for entry_id=%s", entry.entry_id)
     return True
