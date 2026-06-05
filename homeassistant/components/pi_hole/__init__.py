@@ -70,6 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PiHoleConfigEntry) -> bo
                     entry,
                     core_address="localhost:50051",
                     worker_address=worker.address,
+                    worker=worker,
                 )
             _LOGGER.error(
                 "Worker '%s' is not available for entry %s",

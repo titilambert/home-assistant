@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -67,6 +67,7 @@ async def async_setup_remote(
     core_address: str = "localhost:50051",
     worker_port: int = 50052,
     worker_address: str | None = None,
+    worker: Any | None = None,
 ) -> bool:
     """Set up remote execution for a config entry.
 
@@ -81,6 +82,17 @@ async def async_setup_remote(
     """
     if worker_address is not None:
         # Phase 2 path: worker already running, managed by horizontal_scaling.
+        # Check capacity before sending SetupEntry.
+        if worker is not None:
+            if not worker.has_capacity:
+                _LOGGER.error(
+                    "Worker '%s' is at capacity (%d/%d integrations)",
+                    worker.name,
+                    worker.active_integrations,
+                    worker.max_integrations,
+                )
+                return False
+
         # Send SetupEntry to the worker via gRPC so it loads the integration.
         from homeassistant.grpc.worker_client import WorkerClient
 
@@ -127,8 +139,12 @@ async def async_setup_remote(
             await client.close()
             worker_addresses.pop(entry.entry_id, None)
             clients.pop(entry.entry_id, None)
+            if worker is not None:
+                worker.decrement_integrations()
 
         entry.async_on_unload(_teardown_worker)
+        if worker is not None:
+            worker.increment_integrations()
 
         _LOGGER.info(
             "Remote worker (registry-managed) set up entry_id=%s "
