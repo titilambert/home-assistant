@@ -38,7 +38,7 @@ class ProcessWorker(BaseWorker):
             "-m",
             "homeassistant.worker.main",
             "--core-address",
-            "localhost:50051",
+            self._core_address,
             "--worker-port",
             str(self._port),
             "--worker-name",
@@ -85,6 +85,7 @@ class ProcessWorker(BaseWorker):
                     self._port,
                 )
                 asyncio.create_task(self._monitor())
+                await self.async_reload_waiting_entries()
                 return
             await asyncio.sleep(interval)
 

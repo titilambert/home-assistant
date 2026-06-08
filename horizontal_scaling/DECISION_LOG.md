@@ -1080,6 +1080,21 @@ The config flow runs in the Core as it does today. Once the flow is complete and
 
 ---
 
+## Phase 5 Split into Sub-phases
+
+**Decision:** Phase 5 "Complete Core API" is split into 5 sub-phases (5a through 5e) ordered by impact and complexity.
+
+**Rationale:** The full Core API surface is large. Splitting by priority allows incremental value delivery:
+- Phase 5a (Config) fixes immediate bugs with minimal effort (~2h)
+- Phase 5b (Registry) makes entities manageable from HA UI
+- Phase 5c (Translations) fixes display names
+- Phase 5d (Events) enables event-driven integrations
+- Phase 5e (WebSocket/Logger) covers advanced cases
+
+Each sub-phase is independently testable and deployable.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -1105,5 +1120,6 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 19. **Single Docker image** — the same `homeassistant/home-assistant` image serves both Core and Worker; `--mode worker` redirects the entrypoint to `python -m homeassistant.worker.main`; `CONF_WORKER_IMAGE` is optional for Docker workers (defaults to the Core image); custom components (HACS) are automatically available in the worker
 20. **Options flow for worker reassignment deferred** — changing the worker of an existing integration via the options flow is documented but not yet implemented; the worker is currently chosen at creation time only; the core infrastructure (WorkerRegistry, WorkerClient, SetupEntry/TeardownEntry RPCs) is already in place and will support this in a future Phase 2 iteration
 21. **Kubernetes manifest injection** — the Kubernetes worker accepts a user-provided standard K8s manifest (Pod + Service); HA overrides only `metadata.name`, `metadata.namespace`, `spec.containers[0].image`, and `spec.containers[0].env` (merged); all other fields (nodeSelector, tolerations, affinity, resources, volumes, labels, annotations) are preserved as-is; if no manifest is provided HA generates a minimal default; additional manifests (NetworkPolicy, PDB, etc.) are applied via `extra_manifests` without any HA interpretation
+22. **Phase 5 split into sub-phases** — Phase 5 (Complete Core API) is decomposed into 5a–5e ordered by impact: Config (~2h), Registry sync (~1d), Translations (~1d), Event Bus (~1d), WebSocket/Logger (~1d); each sub-phase is independently testable and deployable, enabling incremental value delivery without waiting for the full API surface to be complete
 
 These decisions can be revisited as we learn more from implementation and production use.

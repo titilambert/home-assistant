@@ -228,18 +228,90 @@ async def async_start(hass):
 
 ### Phase 5: Complete Core API
 
-**Goal:** Support all hass.* APIs
+**Goal:** Progressively complete the hass.* API surface in the worker proxy so that more integrations work without modification.
+
+---
+
+#### Phase 5a: Config API
+
+**Goal:** Worker gets real HA config (timezone, units, language, location) from Core
 
 **Scope:**
-- Entity/Device Registry gRPC services
-- Config gRPC service
-- Translation gRPC service
-- WebSocket handler registration
-- Logger streaming (optional)
+- New `GetConfig` RPC in `WorkerService` proto
+- Core handler returns `{timezone, unit_system, language, latitude, longitude, country, currency}`
+- Worker proxy calls `GetConfig` at startup and populates `hass.config` with real values
+- Fixes: `AttributeError: hass.config.units.temperature_unit` (environment_canada, weather integrations)
 
-**Duration:** ~5 days
+**Duration:** ~2h
 
-**Success criteria:** Complex integrations can be migrated
+**Success criteria:** environment_canada sensors show correct units (°C vs °F based on HA config)
+
+---
+
+#### Phase 5b: Entity & Device Registry sync
+
+**Goal:** Entities registered in the worker appear in HA's real entity/device registry
+
+**Scope:**
+- New `RegisterEntity` RPC: worker → Core, Core creates entity_registry entry
+- New `RegisterDevice` RPC: worker → Core, Core creates device_registry entry
+- Worker proxy calls these instead of using mock registries
+- Entities become manageable from HA UI (rename, disable, customize)
+- Entities appear correctly in the Settings → Entities list
+
+**Duration:** ~1 day
+
+**Success criteria:** Entities from remote integrations are visible and manageable in Settings → Entities
+
+---
+
+#### Phase 5c: Translation API
+
+**Goal:** Worker gets translations from Core to display correct entity names
+
+**Scope:**
+- New `GetTranslations(language, category, integration)` RPC
+- Worker proxy uses real translations instead of reading strings.json files locally
+- Fixes: entity names showing raw translation keys instead of translated strings
+
+**Duration:** ~1 day
+
+**Success criteria:** Sensor names display correctly in the user's language
+
+---
+
+#### Phase 5d: Event Bus
+
+**Goal:** Worker can subscribe to HA events (homeassistant_start, state_changed, etc.)
+
+**Scope:**
+- New `SubscribeEvents(event_type_pattern)` streaming RPC (Core → Worker)
+- Worker proxy `hass.bus.async_listen()` actually subscribes via gRPC stream
+- Fixes integrations that react to HA events (automation triggers, etc.)
+
+**Duration:** ~1 day
+
+**Success criteria:** Integrations that use `hass.bus.async_listen` work correctly in worker
+
+---
+
+#### Phase 5e: WebSocket & Logger (optional)
+
+**Goal:** Advanced integrations support
+
+**Scope:**
+- WebSocket handler registration (for integrations that serve WS endpoints)
+- Logger streaming (worker logs appear in HA log viewer)
+
+**Duration:** ~1 day
+
+**Success criteria:** Integrations using `hass.http.register_view` can run in worker
+
+---
+
+**Overall Duration:** ~5 days (unchanged)
+
+**Overall Success criteria:** Complex integrations (weather, climate, etc.) can be migrated without modification
 
 ### Phase 7: Generalization + Tooling
 

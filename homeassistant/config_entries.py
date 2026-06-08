@@ -797,7 +797,7 @@ class ConfigEntry[_DataT = Any]:
                             result = await async_setup_remote(
                                 hass,
                                 self,
-                                core_address="localhost:50051",
+                                core_address=worker.core_address,
                                 worker_address=worker.address,
                                 worker=worker,
                             )
@@ -1049,18 +1049,24 @@ class ConfigEntry[_DataT = Any]:
         if domain_is_integration:
             self._async_set_state(hass, ConfigEntryState.UNLOAD_IN_PROGRESS, None)
         try:
-            runtime_mode = self.options.get("runtime_mode", "local")
+            runtime_mode = self.data.get("runtime_mode", "local")
             if runtime_mode == "remote" and domain_is_integration:
-                executor = hass.data.get("remote_executors", {}).pop(
-                    self.entry_id, None
+                # In REMOTE mode, platforms run inside the worker process.
+                # Calling component.async_unload_entry() would fail because
+                # the EntityComponents for sensor/switch/etc. were never
+                # registered in Core. Instead:
+                # 1. Remove states that were pushed by the worker
+                # 2. Let the on_unload callbacks handle worker teardown
+                from homeassistant.helpers import (
+
+                    entity_registry as er_module,  # noqa: PLC0415
                 )
-                if executor is not None:
-                    _LOGGER.info(
-                        "Stopping remote ProcessExecutor for %s (%s)",
-                        self.domain,
-                        self.entry_id,
-                    )
-                    await executor.stop()
+                entity_registry = er_module.async_get(hass)
+                remote_entities = er_module.async_entries_for_config_entry(
+                    entity_registry, self.entry_id
+                )
+                for er_entry in remote_entities:
+                    hass.states.async_remove(er_entry.entity_id)
                 result = True
             else:
                 result = await component.async_unload_entry(hass, self)

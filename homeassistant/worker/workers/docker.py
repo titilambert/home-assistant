@@ -117,7 +117,7 @@ class DockerWorker(BaseWorker):
                     "HA_MODE": "worker",
                     # Use separate env vars to avoid word-splitting issues with
                     # worker names that contain spaces.
-                    "HA_WORKER_CORE_ADDRESS": "host.docker.internal:50051",
+                    "HA_WORKER_CORE_ADDRESS": self._core_address,
                     "HA_WORKER_PORT": str(self._port),
                     "HA_WORKER_NAME": self._name,
                 },
@@ -171,6 +171,7 @@ class DockerWorker(BaseWorker):
                     self._address,
                 )
                 self._monitor_task = asyncio.create_task(self._monitor())
+                await self.async_reload_waiting_entries()
                 return
             await asyncio.sleep(interval)
 

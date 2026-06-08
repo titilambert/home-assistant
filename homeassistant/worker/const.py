@@ -14,3 +14,12 @@ WORKER_STATUS_NOT_IMPLEMENTED = "not_implemented"
 
 # hass.data key for the worker registry
 DATA_WORKER_REGISTRY = "worker_registry"
+
+# Config key for the Core gRPC address seen by a worker
+CONF_WORKER_CORE_ADDRESS = "core_address"
+
+# Kubernetes-specific config keys
+CONF_WORKER_INCLUSTER = "incluster"
+CONF_WORKER_KUBECONFIG = "kubeconfig"
+CONF_WORKER_MANIFEST = "manifest"
+CONF_WORKER_EXTRA_MANIFESTS = "extra_manifests"

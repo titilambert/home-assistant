@@ -10,6 +10,11 @@ import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    CONF_WORKER_CORE_ADDRESS,
+    CONF_WORKER_EXTRA_MANIFESTS,
+    CONF_WORKER_INCLUSTER,
+    CONF_WORKER_KUBECONFIG,
+    CONF_WORKER_MANIFEST,
     DATA_WORKER_REGISTRY,
     WORKER_TYPE_DOCKER,
     WORKER_TYPE_KUBERNETES,
@@ -55,6 +60,7 @@ PROCESS_WORKER_SCHEMA = vol.Schema(
         vol.Required(CONF_WORKER_TYPE): vol.In([WORKER_TYPE_PROCESS]),
         vol.Required(CONF_WORKER_PORT): cv.port,
         vol.Optional(CONF_WORKER_MAX_INTEGRATIONS): vol.All(int, vol.Range(min=1)),
+        vol.Optional(CONF_WORKER_CORE_ADDRESS, default="localhost:50051"): cv.string,
     }
 )
 
@@ -68,6 +74,7 @@ DOCKER_WORKER_SCHEMA = vol.Schema(
         vol.Optional(CONF_WORKER_MAX_INTEGRATIONS): vol.All(int, vol.Range(min=1)),
         vol.Optional(CONF_WORKER_RESOURCES): RESOURCES_SCHEMA,
         vol.Optional(CONF_WORKER_STOP_ON_SHUTDOWN, default=True): cv.boolean,
+        vol.Optional(CONF_WORKER_CORE_ADDRESS, default="localhost:50051"): cv.string,
     }
 )
 
@@ -77,6 +84,7 @@ REMOTE_WORKER_SCHEMA = vol.Schema(
         vol.Required(CONF_WORKER_TYPE): vol.In([WORKER_TYPE_REMOTE]),
         vol.Required(CONF_WORKER_ADDRESS): cv.string,
         vol.Optional(CONF_WORKER_MAX_INTEGRATIONS): vol.All(int, vol.Range(min=1)),
+        vol.Optional(CONF_WORKER_CORE_ADDRESS, default="localhost:50051"): cv.string,
     }
 )
 
@@ -89,6 +97,14 @@ KUBERNETES_WORKER_SCHEMA = vol.Schema(
         vol.Required(CONF_WORKER_PORT): cv.port,
         vol.Optional(CONF_WORKER_MAX_INTEGRATIONS): vol.All(int, vol.Range(min=1)),
         vol.Optional(CONF_WORKER_POD_SPEC): dict,
+        vol.Optional(CONF_WORKER_INCLUSTER, default=False): cv.boolean,
+        vol.Optional(CONF_WORKER_KUBECONFIG): cv.string,
+        vol.Optional(CONF_WORKER_MANIFEST): cv.string,
+        vol.Optional(CONF_WORKER_EXTRA_MANIFESTS, default=[]): vol.All(
+            cv.ensure_list, [cv.string]
+        ),
+        vol.Optional(CONF_WORKER_CORE_ADDRESS, default="localhost:50051"): cv.string,
+        vol.Optional(CONF_WORKER_STOP_ON_SHUTDOWN, default=True): cv.boolean,
     }
 )
 

@@ -215,30 +215,27 @@ Only **in-cluster** mode is supported by default.
 workers:
   - name: "K8s Worker"
     type: kubernetes
-    # Authentication — choose one:
-    incluster: true                    # HA runs inside K8s (uses pod service account)
-    # kubeconfig: /config/k8s.yaml    # HA runs outside K8s
-
-    namespace: homeassistant
-    image: "homeassistant/home-assistant:local"
+    incluster: true                    # HA runs inside K8s cluster
+    # kubeconfig: /config/k8s.yaml    # OR: HA runs outside K8s
+    namespace: home
+    image: "registry.gitlab.com/user/ha-worker:latest"
     port: 50052
-    max_integrations: 20              # optional, unlimited by default
-
-    # Optional: path to a custom manifest (Pod + Service).
-    # If omitted, HA generates a minimal default manifest.
-    # HA will override the following fields regardless of what is in the manifest:
-    #   Pod:     metadata.name, metadata.namespace, spec.containers[0].image,
-    #            spec.containers[0].env (HA_MODE, HA_WORKER_CORE_ADDRESS,
-    #            HA_WORKER_PORT, HA_WORKER_NAME are added/merged)
-    #   Service: metadata.name, metadata.namespace, spec.selector, spec.ports[0].port
-    # Everything else (labels, annotations, nodeSelector, tolerations, affinity,
-    # resources, volumes, etc.) is preserved from the manifest.
-    manifest: /config/k8s/worker.yaml
-
-    # Optional: additional K8s manifests applied as-is (NetworkPolicy, PDB, Ingress, etc.)
+    core_address: "home-assistant.home.svc.cluster.local:50051"  # required
+    # For testing from outside cluster:
+    # core_address: "192.168.4.17:50051"
+    max_integrations: 20
+    manifest: /config/k8s/worker.yaml  # optional
     extra_manifests:
       - /config/k8s/worker-networkpolicy.yaml
 ```
+
+**Manifest override notes:**
+If `manifest` is provided, HA reads it and overrides only these fields:
+- **Pod:** `metadata.name`, `metadata.namespace`, `spec.containers[0].image`,
+  `spec.containers[0].env` (`HA_MODE`, `HA_WORKER_CORE_ADDRESS`, `HA_WORKER_PORT`, `HA_WORKER_NAME` are merged in)
+- **Service:** `metadata.name`, `metadata.namespace`, `spec.selector`, `spec.ports[0].port`
+
+Everything else (labels, annotations, `nodeSelector`, tolerations, affinity, resources, volumes, etc.) is preserved from the manifest. If `manifest` is absent, HA generates a minimal default manifest.
 
 **Example manifest** (`/config/k8s/worker.yaml`):
 ```yaml
@@ -293,6 +290,7 @@ spec:
 | `namespace` | ✅ | — | K8s namespace for Pod and Service |
 | `image` | ✅ | — | Container image |
 | `port` | ✅ | — | gRPC port |
+| `core_address` | ✅ | — | gRPC address of HA Core reachable from the worker pod (e.g. `ha.home.svc.cluster.local:50051`) |
 | `max_integrations` | ❌ | unlimited | Max integrations |
 | `manifest` | ❌ | auto-generated | Path to custom Pod+Service manifest |
 | `extra_manifests` | ❌ | none | Additional manifests applied as-is |
@@ -371,49 +369,20 @@ is chosen).
 
 HA needs the following permissions to manage worker Pods and Services.
 
-Apply this manifest in your cluster before enabling Kubernetes workers:
+A ready-to-apply manifest is provided at `horizontal_scaling/k8s-rbac.yaml`.
+Adjust the `namespace` fields to match your deployment, then apply it:
 
-```yaml
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: homeassistant
-  namespace: homeassistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: homeassistant-worker-manager
-  namespace: homeassistant
-rules:
-  # Pod management
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch", "create", "delete"]
-  # Service management
-  - apiGroups: [""]
-    resources: ["services"]
-    verbs: ["get", "list", "create", "delete"]
-  # Permission self-check
-  - apiGroups: ["authorization.k8s.io"]
-    resources: ["selfsubjectaccessreviews"]
-    verbs: ["create"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: homeassistant-worker-manager
-  namespace: homeassistant
-subjects:
-  - kind: ServiceAccount
-    name: homeassistant
-    namespace: homeassistant
-roleRef:
-  kind: Role
-  name: homeassistant-worker-manager
-  apiGroup: rbac.authorization.k8s.io
+```bash
+kubectl apply -f horizontal_scaling/k8s-rbac.yaml
 ```
+
+The manifest creates:
+- a `ServiceAccount` named `homeassistant`
+- a `Role` granting `get/list/watch/create/delete` on **pods**, `get` on **pods/log**,
+  `get/list/create/delete` on **services**, and `get/list/create/update/delete` on **configmaps**
+- a `RoleBinding` linking the two
+
+See `horizontal_scaling/k8s-rbac.yaml` for the full resource definitions.
 
 **HA performs a permission check at startup** using `SelfSubjectAccessReview`.
 If the required permissions are missing, HA logs a clear error and disables the

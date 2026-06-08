@@ -59,7 +59,7 @@ class WorkerServiceServicer(core_pb2_grpc.WorkerServiceServicer):
                 )
             )
             return core_pb2.WorkerSetupEntryResponse(success=True)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.exception("SetupEntry failed for entry_id=%s", entry_id)
             return core_pb2.WorkerSetupEntryResponse(success=False, error=str(err))
 

@@ -1,0 +1,49 @@
+# Home Assistant Worker — Kubernetes RBAC
+#
+# Apply this manifest before enabling Kubernetes workers:
+#   kubectl apply -f horizontal_scaling/k8s-rbac.yaml
+#
+# Adjust the namespace to match your HA deployment.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homeassistant
+  namespace: home  # adjust to your namespace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: homeassistant-worker-manager
+  namespace: home  # adjust to your namespace
+rules:
+  # Pod management — create, read, delete worker pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Pod logs — optional, for debugging
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # Service management — create, read, delete worker services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+  # ConfigMap — optional, for worker configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: homeassistant-worker-manager
+  namespace: home  # adjust to your namespace
+subjects:
+  - kind: ServiceAccount
+    name: homeassistant
+    namespace: home  # adjust to your namespace
+roleRef:
+  kind: Role
+  name: homeassistant-worker-manager
+  apiGroup: rbac.authorization.k8s.io

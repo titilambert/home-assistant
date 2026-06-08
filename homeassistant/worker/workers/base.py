@@ -24,6 +24,7 @@ class BaseWorker(ABC):
         self._status: str = WORKER_STATUS_UNAVAILABLE
         self._active_integrations: int = 0
         self._address: str = ""  # gRPC address, set by subclasses
+        self._core_address: str = conf.get("core_address", "localhost:50051")
 
     @property
     def name(self) -> str:
@@ -40,6 +41,11 @@ class BaseWorker(ABC):
     @property
     def address(self) -> str:
         return self._address
+
+    @property
+    def core_address(self) -> str:
+        """Return the gRPC address of the Core as seen from this worker."""
+        return self._core_address
 
     @property
     def has_capacity(self) -> bool:
@@ -76,6 +82,47 @@ class BaseWorker(ABC):
             return True
         except Exception:
             return False
+
+    async def async_reload_waiting_entries(self) -> None:
+        """Reload config entries that were waiting for this worker.
+
+        Called when the worker transitions from UNAVAILABLE to RUNNING.
+        Only reloads entries that are:
+        - assigned to this worker (data["worker_name"] == self._name)
+        - in SETUP_RETRY or SETUP_ERROR state
+        - in remote mode
+        """
+        from homeassistant.config_entries import ConfigEntryState  # noqa: PLC0415
+
+        entries_to_reload = [
+            entry
+            for entry in self._hass.config_entries.async_entries()
+            if (
+                entry.data.get("runtime_mode") == "remote"
+                and entry.data.get("worker_name") == self._name
+                and entry.state
+                in (ConfigEntryState.SETUP_RETRY, ConfigEntryState.SETUP_ERROR)
+            )
+        ]
+
+        if not entries_to_reload:
+            return
+
+        import logging  # noqa: PLC0415
+
+        _logger = logging.getLogger(__name__)
+        _logger.info(
+            "Worker '%s' is ready — reloading %d waiting entry/entries: %s",
+            self._name,
+            len(entries_to_reload),
+            [e.title for e in entries_to_reload],
+        )
+
+        for entry in entries_to_reload:
+            self._hass.async_create_task(
+                self._hass.config_entries.async_reload(entry.entry_id),
+                name=f"reload entry {entry.entry_id} for worker {self._name}",
+            )
 
     @abstractmethod
     async def async_start(self) -> None:

@@ -53,7 +53,11 @@ class WorkerRegistry:
 
                 worker = DockerWorker(self._hass, conf)
             elif worker_type == WORKER_TYPE_KUBERNETES:
-                worker = NotImplementedWorker(self._hass, conf)
+                from homeassistant.worker.workers.kubernetes import (
+                    KubernetesWorker,  # noqa: PLC0415
+                )
+
+                worker = KubernetesWorker(self._hass, conf)
             else:
                 _LOGGER.error("Unknown worker type: %s", worker_type)
                 continue

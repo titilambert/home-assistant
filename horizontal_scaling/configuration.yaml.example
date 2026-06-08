@@ -58,6 +58,11 @@ workers:
     #   incluster: true        → HA runs inside K8s, uses pod service account
     #   kubeconfig: /path      → HA runs outside K8s, uses kubeconfig file
     #
+    # core_address (required): gRPC address of HA Core as seen from inside the
+    # worker pod. When HA runs in-cluster this is typically the ClusterIP Service
+    # DNS name (e.g. home-assistant.home.svc.cluster.local:50051). When testing
+    # from outside the cluster, use the node/LB address instead.
+    #
     # Manifest — HA creates a Pod + ClusterIP Service.
     # If `manifest` is provided, HA reads it and overrides ONLY these fields:
     #   Pod:     metadata.name, metadata.namespace,
@@ -71,15 +76,20 @@ workers:
     #
     # If `manifest` is absent, HA generates a minimal default manifest.
     #
-    # RBAC: HA needs permission to create/delete pods and services.
-    # See horizontal_scaling/WORKERS.md for the required RBAC manifest.
+    # RBAC: apply horizontal_scaling/k8s-rbac.yaml before enabling K8s workers.
+    #   kubectl apply -f horizontal_scaling/k8s-rbac.yaml
+    # See horizontal_scaling/WORKERS.md for full details.
     # -------------------------------------------------------------------------
     - name: "K8s Worker"
       type: kubernetes
-      incluster: true                           # or: kubeconfig: /config/k8s.yaml
-      namespace: homeassistant
-      image: "homeassistant/home-assistant:local"
+      incluster: true                           # HA runs inside K8s cluster
+      # kubeconfig: /config/k8s.yaml           # OR: HA runs outside K8s
+      namespace: home
+      image: "registry.gitlab.com/user/ha-worker:latest"
       port: 50055
+      core_address: "home-assistant.home.svc.cluster.local:50051"  # required
+      # For testing from outside cluster:
+      # core_address: "192.168.4.17:50051"
       max_integrations: 20                      # optional
 
       # Optional: custom manifest (Pod + Service).
