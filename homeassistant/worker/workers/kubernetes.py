@@ -226,7 +226,7 @@ class KubernetesWorker(BaseWorker):
             for manifest_path in self._extra_manifests:
                 self._apply_extra_manifest(manifest_path)
 
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.error(
                 "Failed to start K8s worker '%s': %s", self._name, err, exc_info=True
             )

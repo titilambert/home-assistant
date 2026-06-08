@@ -306,6 +306,21 @@ spec:
 - If the Pod crashes, Core logs an error and retries periodically
 - HA validates its RBAC permissions at startup (see [Kubernetes RBAC Requirements](#kubernetes-rbac-requirements))
 
+**Future: Ingress / OpenShift Route**
+
+For stable hostname-based access (instead of NodePort), you can expose the worker
+via an Ingress or OpenShift Route using `extra_manifests`:
+
+    extra_manifests:
+      - /config/k8s/worker-ingress.yaml
+
+Then set `worker_address` manually to the ingress hostname:
+
+    # Not yet supported as automatic field — set manually via extra_manifests
+    # worker_address: "grpc.ha-worker.home.example.com:443"
+
+Native Ingress/Route generation is planned for a future iteration of Phase 4.
+
 ---
 
 ## Config Flow Behavior

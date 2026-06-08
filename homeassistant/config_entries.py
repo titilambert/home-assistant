@@ -1057,10 +1057,8 @@ class ConfigEntry[_DataT = Any]:
                 # registered in Core. Instead:
                 # 1. Remove states that were pushed by the worker
                 # 2. Let the on_unload callbacks handle worker teardown
-                from homeassistant.helpers import (
+                from homeassistant.helpers import entity_registry as er_module
 
-                    entity_registry as er_module,  # noqa: PLC0415
-                )
                 entity_registry = er_module.async_get(hass)
                 remote_entities = er_module.async_entries_for_config_entry(
                     entity_registry, self.entry_id

@@ -96,7 +96,6 @@ KUBERNETES_WORKER_SCHEMA = vol.Schema(
         vol.Required(CONF_WORKER_IMAGE): cv.string,
         vol.Required(CONF_WORKER_PORT): cv.port,
         vol.Optional(CONF_WORKER_MAX_INTEGRATIONS): vol.All(int, vol.Range(min=1)),
-        vol.Optional(CONF_WORKER_POD_SPEC): dict,
         vol.Optional(CONF_WORKER_INCLUSTER, default=False): cv.boolean,
         vol.Optional(CONF_WORKER_KUBECONFIG): cv.string,
         vol.Optional(CONF_WORKER_MANIFEST): cv.string,

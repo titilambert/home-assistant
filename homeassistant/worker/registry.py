@@ -32,9 +32,6 @@ class WorkerRegistry:
         self._build_workers()
 
     def _build_workers(self) -> None:
-        from homeassistant.worker.workers.not_implemented import (
-            NotImplementedWorker,  # noqa: PLC0415
-        )
         from homeassistant.worker.workers.process import ProcessWorker  # noqa: PLC0415
         from homeassistant.worker.workers.remote import RemoteWorker  # noqa: PLC0415
 
@@ -47,15 +44,11 @@ class WorkerRegistry:
             elif worker_type == WORKER_TYPE_REMOTE:
                 worker = RemoteWorker(self._hass, conf)
             elif worker_type == WORKER_TYPE_DOCKER:
-                from homeassistant.worker.workers.docker import (
-                    DockerWorker,  # noqa: PLC0415
-                )
+                from homeassistant.worker.workers.docker import DockerWorker
 
                 worker = DockerWorker(self._hass, conf)
             elif worker_type == WORKER_TYPE_KUBERNETES:
-                from homeassistant.worker.workers.kubernetes import (
-                    KubernetesWorker,  # noqa: PLC0415
-                )
+                from homeassistant.worker.workers.kubernetes import KubernetesWorker
 
                 worker = KubernetesWorker(self._hass, conf)
             else:

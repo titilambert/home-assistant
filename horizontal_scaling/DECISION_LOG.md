@@ -1095,6 +1095,28 @@ Each sub-phase is independently testable and deployable.
 
 ---
 
+## Kubernetes Worker Address — NodePort vs Ingress/Route
+
+**Decision:** For external access (HA outside K8s cluster), the Kubernetes worker uses a NodePort Service. Ingress and OpenShift Routes are deferred to a future iteration.
+
+**Current approach:**
+- `incluster: true` → ClusterIP Service, address = `ha-worker-{name}.{namespace}.svc.cluster.local:{port}`
+- `kubeconfig` (external) → NodePort Service, address = `{node_ip}:{node_port}`
+
+**Future improvement — Ingress/Route support:**
+Users with an Ingress controller (nginx, traefik) or OpenShift could expose the worker via a stable hostname instead of a NodePort. This would be supported via `extra_manifests`:
+```yaml
+extra_manifests:
+  - /config/k8s/worker-ingress.yaml
+```
+With `worker_address: "grpc.ha-worker.home.example.com:443"` set manually in the worker config.
+
+Native Ingress/Route generation by HA (automatic hostname, TLS termination) is deferred — it requires knowing the cluster's ingress controller, domain, and TLS configuration, which varies too much between deployments to automate safely.
+
+**Phase:** Future iteration of Phase 4.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -1121,5 +1143,6 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 20. **Options flow for worker reassignment deferred** — changing the worker of an existing integration via the options flow is documented but not yet implemented; the worker is currently chosen at creation time only; the core infrastructure (WorkerRegistry, WorkerClient, SetupEntry/TeardownEntry RPCs) is already in place and will support this in a future Phase 2 iteration
 21. **Kubernetes manifest injection** — the Kubernetes worker accepts a user-provided standard K8s manifest (Pod + Service); HA overrides only `metadata.name`, `metadata.namespace`, `spec.containers[0].image`, and `spec.containers[0].env` (merged); all other fields (nodeSelector, tolerations, affinity, resources, volumes, labels, annotations) are preserved as-is; if no manifest is provided HA generates a minimal default; additional manifests (NetworkPolicy, PDB, etc.) are applied via `extra_manifests` without any HA interpretation
 22. **Phase 5 split into sub-phases** — Phase 5 (Complete Core API) is decomposed into 5a–5e ordered by impact: Config (~2h), Registry sync (~1d), Translations (~1d), Event Bus (~1d), WebSocket/Logger (~1d); each sub-phase is independently testable and deployable, enabling incremental value delivery without waiting for the full API surface to be complete
+23. **Kubernetes NodePort over Ingress/Route** — for external access (`kubeconfig` mode), a NodePort Service is used; Ingress and OpenShift Route generation are deferred to a future Phase 4 iteration; advanced users can expose the worker via `extra_manifests` and set `worker_address` manually
 
 These decisions can be revisited as we learn more from implementation and production use.
