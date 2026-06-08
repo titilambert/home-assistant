@@ -3,8 +3,8 @@
 1. **No separate POC directory** - Code is in the proper location from the start
 2. **Integration code unchanged** - Existing files remain untouched
 3. **Shared proxy** - `HomeAssistantGrpcProxy` in `helpers/` is reused by all remote integrations
-4. **Core gRPC in `grpc/`** - Centralized gRPC server code
-5. **Executors in `executors/`** - Executor implementations and factory
+4. **Core gRPC in `core_grpc/`** - Centralized gRPC server code
+5. **Worker in `worker/`** - Worker proxy and runtime
 
 The Core always starts a gRPC server on startup (port 50051, localhost by default).
 
@@ -48,7 +48,7 @@ The Core always starts a gRPC server on startup (port 50051, localhost by defaul
 
 ### Implementation
 
-Located in `homeassistant/grpc/`:
+Located in `homeassistant/core_grpc/`:
 - `server.py` - Main gRPC server
 - `services/state_service.py` - State machine service
 - `services/event_service.py` - Event bus service
@@ -63,7 +63,7 @@ async def async_start(hass):
     # ... existing setup ...
     
     # Start gRPC server
-    from homeassistant.grpc import start_grpc_server
+    from homeassistant.core_grpc import start_grpc_server
     grpc_server = await start_grpc_server(hass, port=50051)
     hass.grpc_server = grpc_server
     
@@ -112,7 +112,7 @@ async def async_start(hass):
 
 **Success criteria:** Pi-hole runs remotely, states sync, commands work ✅
 
-### Phase 1: Generic Worker + ProcessExecutor
+### Phase 1: Generic Worker + ProcessExecutor ✅ COMPLETED
 
 **Goal:** Automate subprocess launch with a generic worker, add Events/Services
 
@@ -133,12 +133,12 @@ async def async_start(hass):
 
 **Success criteria:** Generic worker loads Pi-hole (and any compatible integration) without modifying the integration code
 
-### Phase 2: Worker Configuration
+### Phase 2: Worker Configuration ✅ COMPLETED
 
 **Goal:** Allow users to declare workers in configuration.yaml and assign integrations to them via the config flow UI
 
 **Scope:**
-- New `horizontal_scaling:` component in HA reading `configuration.yaml`
+- Workers declared directly under `workers:` key in `configuration.yaml` (no component needed — `horizontal_scaling:` component removed)
 - Worker declaration schema validation (process, docker, remote, kubernetes types)
 - Worker registry in `hass.data` — tracks declared workers, their status and capacity
 - Worker lifecycle management at HA startup/shutdown per type:
@@ -165,7 +165,7 @@ async def async_start(hass):
 - HA startup/shutdown correctly manages worker lifecycle per type
 - ⏭ User can change the worker of an existing integration via the options flow (deferred)
 
-### Phase 3: DockerExecutor
+### Phase 3: DockerExecutor ✅ COMPLETED
 
 **Goal:** Container isolation
 

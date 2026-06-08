@@ -731,7 +731,7 @@ This POC proves that:
 
 ### Implemented Components
 
-#### 1. Core gRPC Server (`homeassistant/grpc/`) — starts automatically on HA boot
+#### 1. Core gRPC Server (`homeassistant/core_grpc/`) — starts automatically on HA boot
 
 | Method | Status |
 |---|---|
@@ -741,19 +741,19 @@ This POC proves that:
 | `RegisterWorker(entry_id, worker_address)` | ✅ |
 | `CallServiceOnRemote` (stub) | ✅ |
 
-#### 2. Worker gRPC Server (`homeassistant/grpc/worker_server.py`)
+#### 2. Worker gRPC Server (`homeassistant/core_grpc/worker_server.py`)
 
 | Method | Status |
 |---|---|
 | `CallService(domain, service, entity_id, service_data)` | ✅ |
 
-#### 3. Worker Client (`homeassistant/grpc/worker_client.py`)
+#### 3. Worker Client (`homeassistant/core_grpc/worker_client.py`)
 
 | Component | Status |
 |---|---|
 | Connection from Core to worker | ✅ |
 
-#### 4. `HomeAssistantGrpcProxy` (`homeassistant/helpers/remote_hass.py`)
+#### 4. `HomeAssistantGrpcProxy` (`homeassistant/worker/proxy.py`)
 
 | Feature | Status |
 |---|---|
@@ -763,13 +763,13 @@ This POC proves that:
 | Monkey-patches: `er.async_migrate_entries`, `async_get_clientsession` | ✅ |
 | `async_run_hass_job`, `async_add_executor_job`, `async_create_task` | ✅ |
 
-#### 5. ProcessExecutor (`homeassistant/executors/process.py`)
+#### 5. ProcessExecutor (`homeassistant/executors/process.py`) *(removed — replaced by worker registry)*
 
 | Component | Status |
 |---|---|
 | Subprocess launch | ✅ |
 
-#### 6. Remote entry point Pi-hole (`homeassistant/components/pi_hole/remote/main.py`)
+#### 6. Remote entry point Pi-hole (`homeassistant/components/pi_hole/remote/main.py`) *(removed — replaced by generic worker)*
 
 | Component | Status |
 |---|---|
@@ -794,7 +794,7 @@ This POC proves that:
 
 ## Phase 1: Generic Worker
 
-> **Status: 🔲 TO IMPLEMENT**
+> **Status: ✅ COMPLETED**
 
 ### Objective
 

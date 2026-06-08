@@ -70,7 +70,7 @@ async def async_setup_remote(
 
     Two modes:
     - worker_address provided: the worker is already running (managed by the
-      horizontal_scaling registry). Skip subprocess launch and just register
+      workers registry). Skip subprocess launch and just register
       the entry against that worker address.
     - worker_address is None: launch a new subprocess via ProcessExecutor
       (legacy / standalone behaviour).
@@ -78,7 +78,7 @@ async def async_setup_remote(
     Called by an integration's async_setup_entry when runtime mode is REMOTE.
     """
     if worker_address is not None:
-        # Phase 2 path: worker already running, managed by horizontal_scaling.
+        # Phase 2 path: worker already running, managed by workers registry.
         # Check capacity before sending SetupEntry.
         if worker is not None:
             if not worker.has_capacity:
@@ -156,7 +156,7 @@ async def async_setup_remote(
     _LOGGER.error(
         "Cannot set up entry_id=%s (domain=%s) in REMOTE mode: "
         "no worker address provided. Declare a worker in configuration.yaml "
-        "under horizontal_scaling.workers.",
+        "under workers: in configuration.yaml.",
         entry.entry_id,
         entry.domain,
     )

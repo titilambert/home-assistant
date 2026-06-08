@@ -1,4 +1,4 @@
-"""Worker configuration — reads horizontal_scaling: from configuration.yaml."""
+"""Worker configuration — reads workers: from configuration.yaml."""
 
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "workers"
 
-CONF_WORKERS = "workers"
 CONF_WORKER_NAME = "name"
 CONF_WORKER_TYPE = "type"
 CONF_WORKER_PORT = "port"
@@ -130,7 +129,7 @@ async def async_setup_workers(hass: HomeAssistant, config: dict) -> None:
 
     names = [w[CONF_WORKER_NAME] for w in workers_conf]
     if len(names) != len(set(names)):
-        _LOGGER.error("Duplicate worker names in horizontal_scaling configuration")
+        _LOGGER.error("Duplicate worker names in workers configuration")
         return
 
     registry = WorkerRegistry(hass, workers_conf)
@@ -143,7 +142,7 @@ async def async_setup_workers(hass: HomeAssistant, config: dict) -> None:
     hass.bus.async_listen_once("homeassistant_stop", _stop_workers)
 
     _LOGGER.info(
-        "Horizontal scaling: %d worker(s) declared (%s)",
+        "Workers: %d worker(s) declared (%s)",
         len(workers_conf),
         ", ".join(
             f"{w[CONF_WORKER_NAME]} ({w[CONF_WORKER_TYPE]})" for w in workers_conf

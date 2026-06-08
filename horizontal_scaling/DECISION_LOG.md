@@ -1064,6 +1064,22 @@ The config flow runs in the Core as it does today. Once the flow is complete and
 
 ---
 
+## Code Reorganization — core_grpc/ and worker/
+
+**Decision:** The code was reorganized to clearly separate Core-side gRPC code from Worker-side code, and the `horizontal_scaling` component was removed in favor of a direct `workers:` key in configuration.yaml.
+
+**Changes:**
+- `homeassistant/grpc/` → `homeassistant/core_grpc/` (Core gRPC server, client, protos)
+- `homeassistant/helpers/remote_hass.py` → `homeassistant/worker/proxy.py` (Worker proxy)
+- `homeassistant/components/horizontal_scaling/` → removed (workers/ and registry/ moved to `homeassistant/worker/`)
+- `homeassistant/executors/` → removed (replaced by worker registry)
+- `horizontal_scaling:` in configuration.yaml → `workers:` (simpler, no component needed)
+- `pi_hole/remote/main.py` → removed (replaced by generic worker)
+
+**Rationale:** Clearer separation between what runs in Core vs what runs in the Worker subprocess. Removing the HA component for worker configuration eliminates the need for HA's component discovery system just to read a YAML config.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:

@@ -20,7 +20,7 @@ class WorkerServiceServicer(core_pb2_grpc.WorkerServiceServicer):
     """Handles WorkerService RPCs from Core."""
 
     def __init__(self, services_proxy: Any, hass_proxy: Any = None) -> None:
-        self._services = services_proxy  # ServicesProxy instance from remote_hass.py
+        self._services = services_proxy  # ServicesProxy instance from worker/proxy.py
         self._hass = hass_proxy  # HomeAssistantGrpcProxy instance
         self._entries: dict[str, Any] = {}  # entry_id -> _MinimalConfigEntry
 

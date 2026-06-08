@@ -385,6 +385,7 @@ class _MockUnits:
     volume_unit = "L"
     wind_speed_unit = "km/h"
     accumulated_precipitation_unit = "mm"
+    area_unit = "m²"
 
 
 class _MockConfig:
