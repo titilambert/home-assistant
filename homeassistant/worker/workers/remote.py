@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
 
 from homeassistant.worker.const import WORKER_STATUS_RUNNING, WORKER_STATUS_UNAVAILABLE
 from homeassistant.worker.workers.base import BaseWorker
