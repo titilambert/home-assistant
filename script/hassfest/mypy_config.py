@@ -239,6 +239,11 @@ def _generate_and_validate_mypy_config(config: Config) -> str:
     for key in STRICT_SETTINGS:
         mypy_config.set(tests_section, key, "false")
 
+    # Ignore errors in generated protobuf/gRPC files (auto-generated, not hand-written)
+    proto_section = "mypy-homeassistant.core_grpc.protos.*"
+    mypy_config.add_section(proto_section)
+    mypy_config.set(proto_section, "ignore_errors", "true")
+
     with io.StringIO() as fp:
         mypy_config.write(fp)
         fp.seek(0)

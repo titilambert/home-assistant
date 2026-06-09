@@ -108,3 +108,10 @@ repos:
         language: script
         types: [text]
         files: ^(script/hassfest/mypy_config\.py|\.strict-typing|mypy\.ini)$
+      - id: gen-grpc-protos
+        name: gen-grpc-protos
+        entry: script/run-in-env.sh script/gen_grpc_protos.sh
+        pass_filenames: false
+        language: script
+        types: [text]
+        files: ^homeassistant/core_grpc/protos/core\.proto$

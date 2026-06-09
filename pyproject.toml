@@ -416,6 +416,9 @@ per-file-ignores = [
   # use-implicit-booleaness-not-comparison: Tests need to validate that a list
   # or a dict is returned
   "/tests/:redefined-outer-name,use-implicit-booleaness-not-comparison",
+  # Auto-generated protobuf/gRPC files — skip all pylint checks
+  "homeassistant/core_grpc/protos/core_pb2.py:C,R,W,E",
+  "homeassistant/core_grpc/protos/core_pb2_grpc.py:C,R,W,E",
 ]
 
 [tool.pylint.REPORTS]
@@ -672,6 +675,11 @@ exclude_lines = [
 
 [tool.ruff]
 required-version = ">=0.15.1"
+exclude = [
+  # Auto-generated protobuf/gRPC files — not hand-written
+  "homeassistant/core_grpc/protos/core_pb2.py",
+  "homeassistant/core_grpc/protos/core_pb2_grpc.py",
+]
 
 [tool.ruff.lint]
 select = [

@@ -3,94 +3,94 @@
 # source: core.proto
 # Protobuf Python Version: 6.31.1
 """Generated protocol buffer code."""
+
 from google.protobuf import (
-  descriptor as _descriptor,
-  descriptor_pool as _descriptor_pool,
-  runtime_version as _runtime_version,
-  symbol_database as _symbol_database,
+    descriptor as _descriptor,
+    descriptor_pool as _descriptor_pool,
+    runtime_version as _runtime_version,
+    symbol_database as _symbol_database,
 )
 from google.protobuf.internal import builder as _builder
 
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'core.proto'
+    _runtime_version.Domain.PUBLIC, 6, 31, 1, "", "core.proto"
 )
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
 
 
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ncore.proto\x12\x12homeassistant.core\"\xc1\x01\n\x0fSetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\x12G\n\nattributes\x18\x03 \x03(\x0b\x32\x33.homeassistant.core.SetStateRequest.AttributesEntry\x12\x10\n\x08\x65ntry_id\x18\x04 \x01(\t\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"2\n\x10SetStateResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"$\n\x0fGetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t\"\xd6\x01\n\x10GetStateResponse\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\x11\n\tentity_id\x18\x02 \x01(\t\x12\r\n\x05state\x18\x03 \x01(\t\x12H\n\nattributes\x18\x04 \x03(\x0b\x32\x34.homeassistant.core.GetStateResponse.AttributesEntry\x12\x14\n\x0clast_updated\x18\x05 \x01(\x03\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"K\n\x16RegisterServiceRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x10\n\x08\x65ntry_id\x18\x03 \x01(\t\"9\n\x17RegisterServiceResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\xdb\x01\n\x1a\x43\x61llServiceOnRemoteRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x11\n\tentity_id\x18\x03 \x01(\t\x12U\n\x0cservice_data\x18\x04 \x03(\x0b\x32?.homeassistant.core.CallServiceOnRemoteRequest.ServiceDataEntry\x1a\x32\n\x10ServiceDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"=\n\x1b\x43\x61llServiceOnRemoteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"A\n\x15RegisterWorkerRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t\x12\x16\n\x0eworker_address\x18\x02 \x01(\t\"8\n\x16RegisterWorkerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"#\n\x0fGetEntryRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t\"q\n\x10GetEntryResponse\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\x0e\n\x06\x63onfig\x18\x03 \x01(\x0c\x12\x0f\n\x07options\x18\x04 \x01(\x0c\x12\r\n\x05title\x18\x05 \x01(\t\x12\x0e\n\x06source\x18\x06 \x01(\t\"\x12\n\x10GetConfigRequest\"\xc4\x02\n\x11GetConfigResponse\x12\x11\n\ttime_zone\x18\x01 \x01(\t\x12\x13\n\x0bunit_system\x18\x02 \x01(\t\x12\x10\n\x08language\x18\x03 \x01(\t\x12\x10\n\x08latitude\x18\x04 \x01(\x01\x12\x11\n\tlongitude\x18\x05 \x01(\x01\x12\x0f\n\x07\x63ountry\x18\x06 \x01(\t\x12\x10\n\x08\x63urrency\x18\x07 \x01(\t\x12\x18\n\x10temperature_unit\x18\x08 \x01(\t\x12\x13\n\x0blength_unit\x18\t \x01(\t\x12\x11\n\tmass_unit\x18\n \x01(\t\x12\x15\n\rpressure_unit\x18\x0b \x01(\t\x12\x13\n\x0bvolume_unit\x18\x0c \x01(\t\x12\x17\n\x0fwind_speed_unit\x18\r \x01(\t\x12&\n\x1e\x61\x63\x63umulated_precipitation_unit\x18\x0e \x01(\t\"\xd7\x01\n\x18WorkerCallServiceRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x11\n\tentity_id\x18\x03 \x01(\t\x12S\n\x0cservice_data\x18\x04 \x03(\x0b\x32=.homeassistant.core.WorkerCallServiceRequest.ServiceDataEntry\x1a\x32\n\x10ServiceDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\";\n\x19WorkerCallServiceResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"+\n\x17WorkerSetupEntryRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t\":\n\x18WorkerSetupEntryResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\".\n\x1aWorkerTeardownEntryRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t\"=\n\x1bWorkerTeardownEntryResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t2\xb9\x05\n\x0b\x43oreService\x12U\n\x08SetState\x12#.homeassistant.core.SetStateRequest\x1a$.homeassistant.core.SetStateResponse\x12U\n\x08GetState\x12#.homeassistant.core.GetStateRequest\x1a$.homeassistant.core.GetStateResponse\x12j\n\x0fRegisterService\x12*.homeassistant.core.RegisterServiceRequest\x1a+.homeassistant.core.RegisterServiceResponse\x12v\n\x13\x43\x61llServiceOnRemote\x12..homeassistant.core.CallServiceOnRemoteRequest\x1a/.homeassistant.core.CallServiceOnRemoteResponse\x12g\n\x0eRegisterWorker\x12).homeassistant.core.RegisterWorkerRequest\x1a*.homeassistant.core.RegisterWorkerResponse\x12U\n\x08GetEntry\x12#.homeassistant.core.GetEntryRequest\x1a$.homeassistant.core.GetEntryResponse\x12X\n\tGetConfig\x12$.homeassistant.core.GetConfigRequest\x1a%.homeassistant.core.GetConfigResponse2\xd6\x02\n\rWorkerService\x12j\n\x0b\x43\x61llService\x12,.homeassistant.core.WorkerCallServiceRequest\x1a-.homeassistant.core.WorkerCallServiceResponse\x12g\n\nSetupEntry\x12+.homeassistant.core.WorkerSetupEntryRequest\x1a,.homeassistant.core.WorkerSetupEntryResponse\x12p\n\rTeardownEntry\x12..homeassistant.core.WorkerTeardownEntryRequest\x1a/.homeassistant.core.WorkerTeardownEntryResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\ncore.proto\x12\x12homeassistant.core"\xc1\x01\n\x0fSetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\x12G\n\nattributes\x18\x03 \x03(\x0b\x32\x33.homeassistant.core.SetStateRequest.AttributesEntry\x12\x10\n\x08\x65ntry_id\x18\x04 \x01(\t\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"2\n\x10SetStateResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t"$\n\x0fGetStateRequest\x12\x11\n\tentity_id\x18\x01 \x01(\t"\xd6\x01\n\x10GetStateResponse\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\x11\n\tentity_id\x18\x02 \x01(\t\x12\r\n\x05state\x18\x03 \x01(\t\x12H\n\nattributes\x18\x04 \x03(\x0b\x32\x34.homeassistant.core.GetStateResponse.AttributesEntry\x12\x14\n\x0clast_updated\x18\x05 \x01(\x03\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"K\n\x16RegisterServiceRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x10\n\x08\x65ntry_id\x18\x03 \x01(\t"9\n\x17RegisterServiceResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t"\xdb\x01\n\x1a\x43\x61llServiceOnRemoteRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x11\n\tentity_id\x18\x03 \x01(\t\x12U\n\x0cservice_data\x18\x04 \x03(\x0b\x32?.homeassistant.core.CallServiceOnRemoteRequest.ServiceDataEntry\x1a\x32\n\x10ServiceDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"=\n\x1b\x43\x61llServiceOnRemoteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t"A\n\x15RegisterWorkerRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t\x12\x16\n\x0eworker_address\x18\x02 \x01(\t"8\n\x16RegisterWorkerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t"#\n\x0fGetEntryRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t"q\n\x10GetEntryResponse\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\x0e\n\x06\x63onfig\x18\x03 \x01(\x0c\x12\x0f\n\x07options\x18\x04 \x01(\x0c\x12\r\n\x05title\x18\x05 \x01(\t\x12\x0e\n\x06source\x18\x06 \x01(\t"\x12\n\x10GetConfigRequest"\xc4\x02\n\x11GetConfigResponse\x12\x11\n\ttime_zone\x18\x01 \x01(\t\x12\x13\n\x0bunit_system\x18\x02 \x01(\t\x12\x10\n\x08language\x18\x03 \x01(\t\x12\x10\n\x08latitude\x18\x04 \x01(\x01\x12\x11\n\tlongitude\x18\x05 \x01(\x01\x12\x0f\n\x07\x63ountry\x18\x06 \x01(\t\x12\x10\n\x08\x63urrency\x18\x07 \x01(\t\x12\x18\n\x10temperature_unit\x18\x08 \x01(\t\x12\x13\n\x0blength_unit\x18\t \x01(\t\x12\x11\n\tmass_unit\x18\n \x01(\t\x12\x15\n\rpressure_unit\x18\x0b \x01(\t\x12\x13\n\x0bvolume_unit\x18\x0c \x01(\t\x12\x17\n\x0fwind_speed_unit\x18\r \x01(\t\x12&\n\x1e\x61\x63\x63umulated_precipitation_unit\x18\x0e \x01(\t"\xd7\x01\n\x18WorkerCallServiceRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x11\n\tentity_id\x18\x03 \x01(\t\x12S\n\x0cservice_data\x18\x04 \x03(\x0b\x32=.homeassistant.core.WorkerCallServiceRequest.ServiceDataEntry\x1a\x32\n\x10ServiceDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01";\n\x19WorkerCallServiceResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t"+\n\x17WorkerSetupEntryRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t":\n\x18WorkerSetupEntryResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t".\n\x1aWorkerTeardownEntryRequest\x12\x10\n\x08\x65ntry_id\x18\x01 \x01(\t"=\n\x1bWorkerTeardownEntryResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t2\xb9\x05\n\x0b\x43oreService\x12U\n\x08SetState\x12#.homeassistant.core.SetStateRequest\x1a$.homeassistant.core.SetStateResponse\x12U\n\x08GetState\x12#.homeassistant.core.GetStateRequest\x1a$.homeassistant.core.GetStateResponse\x12j\n\x0fRegisterService\x12*.homeassistant.core.RegisterServiceRequest\x1a+.homeassistant.core.RegisterServiceResponse\x12v\n\x13\x43\x61llServiceOnRemote\x12..homeassistant.core.CallServiceOnRemoteRequest\x1a/.homeassistant.core.CallServiceOnRemoteResponse\x12g\n\x0eRegisterWorker\x12).homeassistant.core.RegisterWorkerRequest\x1a*.homeassistant.core.RegisterWorkerResponse\x12U\n\x08GetEntry\x12#.homeassistant.core.GetEntryRequest\x1a$.homeassistant.core.GetEntryResponse\x12X\n\tGetConfig\x12$.homeassistant.core.GetConfigRequest\x1a%.homeassistant.core.GetConfigResponse2\xd6\x02\n\rWorkerService\x12j\n\x0b\x43\x61llService\x12,.homeassistant.core.WorkerCallServiceRequest\x1a-.homeassistant.core.WorkerCallServiceResponse\x12g\n\nSetupEntry\x12+.homeassistant.core.WorkerSetupEntryRequest\x1a,.homeassistant.core.WorkerSetupEntryResponse\x12p\n\rTeardownEntry\x12..homeassistant.core.WorkerTeardownEntryRequest\x1a/.homeassistant.core.WorkerTeardownEntryResponseb\x06proto3'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'core_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "core_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  DESCRIPTOR._loaded_options = None
-  _globals['_SETSTATEREQUEST_ATTRIBUTESENTRY']._loaded_options = None
-  _globals['_SETSTATEREQUEST_ATTRIBUTESENTRY']._serialized_options = b'8\001'
-  _globals['_GETSTATERESPONSE_ATTRIBUTESENTRY']._loaded_options = None
-  _globals['_GETSTATERESPONSE_ATTRIBUTESENTRY']._serialized_options = b'8\001'
-  _globals['_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY']._loaded_options = None
-  _globals['_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY']._serialized_options = b'8\001'
-  _globals['_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY']._loaded_options = None
-  _globals['_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY']._serialized_options = b'8\001'
-  _globals['_SETSTATEREQUEST']._serialized_start=35
-  _globals['_SETSTATEREQUEST']._serialized_end=228
-  _globals['_SETSTATEREQUEST_ATTRIBUTESENTRY']._serialized_start=179
-  _globals['_SETSTATEREQUEST_ATTRIBUTESENTRY']._serialized_end=228
-  _globals['_SETSTATERESPONSE']._serialized_start=230
-  _globals['_SETSTATERESPONSE']._serialized_end=280
-  _globals['_GETSTATEREQUEST']._serialized_start=282
-  _globals['_GETSTATEREQUEST']._serialized_end=318
-  _globals['_GETSTATERESPONSE']._serialized_start=321
-  _globals['_GETSTATERESPONSE']._serialized_end=535
-  _globals['_GETSTATERESPONSE_ATTRIBUTESENTRY']._serialized_start=179
-  _globals['_GETSTATERESPONSE_ATTRIBUTESENTRY']._serialized_end=228
-  _globals['_REGISTERSERVICEREQUEST']._serialized_start=537
-  _globals['_REGISTERSERVICEREQUEST']._serialized_end=612
-  _globals['_REGISTERSERVICERESPONSE']._serialized_start=614
-  _globals['_REGISTERSERVICERESPONSE']._serialized_end=671
-  _globals['_CALLSERVICEONREMOTEREQUEST']._serialized_start=674
-  _globals['_CALLSERVICEONREMOTEREQUEST']._serialized_end=893
-  _globals['_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY']._serialized_start=843
-  _globals['_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY']._serialized_end=893
-  _globals['_CALLSERVICEONREMOTERESPONSE']._serialized_start=895
-  _globals['_CALLSERVICEONREMOTERESPONSE']._serialized_end=956
-  _globals['_REGISTERWORKERREQUEST']._serialized_start=958
-  _globals['_REGISTERWORKERREQUEST']._serialized_end=1023
-  _globals['_REGISTERWORKERRESPONSE']._serialized_start=1025
-  _globals['_REGISTERWORKERRESPONSE']._serialized_end=1081
-  _globals['_GETENTRYREQUEST']._serialized_start=1083
-  _globals['_GETENTRYREQUEST']._serialized_end=1118
-  _globals['_GETENTRYRESPONSE']._serialized_start=1120
-  _globals['_GETENTRYRESPONSE']._serialized_end=1233
-  _globals['_GETCONFIGREQUEST']._serialized_start=1235
-  _globals['_GETCONFIGREQUEST']._serialized_end=1253
-  _globals['_GETCONFIGRESPONSE']._serialized_start=1256
-  _globals['_GETCONFIGRESPONSE']._serialized_end=1580
-  _globals['_WORKERCALLSERVICEREQUEST']._serialized_start=1583
-  _globals['_WORKERCALLSERVICEREQUEST']._serialized_end=1798
-  _globals['_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY']._serialized_start=843
-  _globals['_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY']._serialized_end=893
-  _globals['_WORKERCALLSERVICERESPONSE']._serialized_start=1800
-  _globals['_WORKERCALLSERVICERESPONSE']._serialized_end=1859
-  _globals['_WORKERSETUPENTRYREQUEST']._serialized_start=1861
-  _globals['_WORKERSETUPENTRYREQUEST']._serialized_end=1904
-  _globals['_WORKERSETUPENTRYRESPONSE']._serialized_start=1906
-  _globals['_WORKERSETUPENTRYRESPONSE']._serialized_end=1964
-  _globals['_WORKERTEARDOWNENTRYREQUEST']._serialized_start=1966
-  _globals['_WORKERTEARDOWNENTRYREQUEST']._serialized_end=2012
-  _globals['_WORKERTEARDOWNENTRYRESPONSE']._serialized_start=2014
-  _globals['_WORKERTEARDOWNENTRYRESPONSE']._serialized_end=2075
-  _globals['_CORESERVICE']._serialized_start=2078
-  _globals['_CORESERVICE']._serialized_end=2775
-  _globals['_WORKERSERVICE']._serialized_start=2778
-  _globals['_WORKERSERVICE']._serialized_end=3120
+    DESCRIPTOR._loaded_options = None
+    _globals["_SETSTATEREQUEST_ATTRIBUTESENTRY"]._loaded_options = None
+    _globals["_SETSTATEREQUEST_ATTRIBUTESENTRY"]._serialized_options = b"8\001"
+    _globals["_GETSTATERESPONSE_ATTRIBUTESENTRY"]._loaded_options = None
+    _globals["_GETSTATERESPONSE_ATTRIBUTESENTRY"]._serialized_options = b"8\001"
+    _globals["_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY"]._loaded_options = None
+    _globals[
+        "_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY"
+    ]._serialized_options = b"8\001"
+    _globals["_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY"]._loaded_options = None
+    _globals[
+        "_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY"
+    ]._serialized_options = b"8\001"
+    _globals["_SETSTATEREQUEST"]._serialized_start = 35
+    _globals["_SETSTATEREQUEST"]._serialized_end = 228
+    _globals["_SETSTATEREQUEST_ATTRIBUTESENTRY"]._serialized_start = 179
+    _globals["_SETSTATEREQUEST_ATTRIBUTESENTRY"]._serialized_end = 228
+    _globals["_SETSTATERESPONSE"]._serialized_start = 230
+    _globals["_SETSTATERESPONSE"]._serialized_end = 280
+    _globals["_GETSTATEREQUEST"]._serialized_start = 282
+    _globals["_GETSTATEREQUEST"]._serialized_end = 318
+    _globals["_GETSTATERESPONSE"]._serialized_start = 321
+    _globals["_GETSTATERESPONSE"]._serialized_end = 535
+    _globals["_GETSTATERESPONSE_ATTRIBUTESENTRY"]._serialized_start = 179
+    _globals["_GETSTATERESPONSE_ATTRIBUTESENTRY"]._serialized_end = 228
+    _globals["_REGISTERSERVICEREQUEST"]._serialized_start = 537
+    _globals["_REGISTERSERVICEREQUEST"]._serialized_end = 612
+    _globals["_REGISTERSERVICERESPONSE"]._serialized_start = 614
+    _globals["_REGISTERSERVICERESPONSE"]._serialized_end = 671
+    _globals["_CALLSERVICEONREMOTEREQUEST"]._serialized_start = 674
+    _globals["_CALLSERVICEONREMOTEREQUEST"]._serialized_end = 893
+    _globals["_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY"]._serialized_start = 843
+    _globals["_CALLSERVICEONREMOTEREQUEST_SERVICEDATAENTRY"]._serialized_end = 893
+    _globals["_CALLSERVICEONREMOTERESPONSE"]._serialized_start = 895
+    _globals["_CALLSERVICEONREMOTERESPONSE"]._serialized_end = 956
+    _globals["_REGISTERWORKERREQUEST"]._serialized_start = 958
+    _globals["_REGISTERWORKERREQUEST"]._serialized_end = 1023
+    _globals["_REGISTERWORKERRESPONSE"]._serialized_start = 1025
+    _globals["_REGISTERWORKERRESPONSE"]._serialized_end = 1081
+    _globals["_GETENTRYREQUEST"]._serialized_start = 1083
+    _globals["_GETENTRYREQUEST"]._serialized_end = 1118
+    _globals["_GETENTRYRESPONSE"]._serialized_start = 1120
+    _globals["_GETENTRYRESPONSE"]._serialized_end = 1233
+    _globals["_GETCONFIGREQUEST"]._serialized_start = 1235
+    _globals["_GETCONFIGREQUEST"]._serialized_end = 1253
+    _globals["_GETCONFIGRESPONSE"]._serialized_start = 1256
+    _globals["_GETCONFIGRESPONSE"]._serialized_end = 1580
+    _globals["_WORKERCALLSERVICEREQUEST"]._serialized_start = 1583
+    _globals["_WORKERCALLSERVICEREQUEST"]._serialized_end = 1798
+    _globals["_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY"]._serialized_start = 843
+    _globals["_WORKERCALLSERVICEREQUEST_SERVICEDATAENTRY"]._serialized_end = 893
+    _globals["_WORKERCALLSERVICERESPONSE"]._serialized_start = 1800
+    _globals["_WORKERCALLSERVICERESPONSE"]._serialized_end = 1859
+    _globals["_WORKERSETUPENTRYREQUEST"]._serialized_start = 1861
+    _globals["_WORKERSETUPENTRYREQUEST"]._serialized_end = 1904
+    _globals["_WORKERSETUPENTRYRESPONSE"]._serialized_start = 1906
+    _globals["_WORKERSETUPENTRYRESPONSE"]._serialized_end = 1964
+    _globals["_WORKERTEARDOWNENTRYREQUEST"]._serialized_start = 1966
+    _globals["_WORKERTEARDOWNENTRYREQUEST"]._serialized_end = 2012
+    _globals["_WORKERTEARDOWNENTRYRESPONSE"]._serialized_start = 2014
+    _globals["_WORKERTEARDOWNENTRYRESPONSE"]._serialized_end = 2075
+    _globals["_CORESERVICE"]._serialized_start = 2078
+    _globals["_CORESERVICE"]._serialized_end = 2775
+    _globals["_WORKERSERVICE"]._serialized_start = 2778
+    _globals["_WORKERSERVICE"]._serialized_end = 3120
 # @@protoc_insertion_point(module_scope)
