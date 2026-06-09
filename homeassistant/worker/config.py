@@ -15,6 +15,7 @@ from .const import (
     CONF_WORKER_INCLUSTER,
     CONF_WORKER_KUBECONFIG,
     CONF_WORKER_MANIFEST,
+    CONF_WORKER_SERVICE_TYPE,
     DATA_WORKER_REGISTRY,
     WORKER_TYPE_DOCKER,
     WORKER_TYPE_KUBERNETES,
@@ -74,7 +75,7 @@ DOCKER_WORKER_SCHEMA = vol.Schema(
         vol.Optional(CONF_WORKER_MAX_INTEGRATIONS): vol.All(int, vol.Range(min=1)),
         vol.Optional(CONF_WORKER_RESOURCES): RESOURCES_SCHEMA,
         vol.Optional(CONF_WORKER_STOP_ON_SHUTDOWN, default=True): cv.boolean,
-        vol.Optional(CONF_WORKER_CORE_ADDRESS, default="localhost:50051"): cv.string,
+        vol.Required(CONF_WORKER_CORE_ADDRESS): cv.string,
     }
 )
 
@@ -109,7 +110,7 @@ KUBERNETES_WORKER_SCHEMA = vol.Schema(
         vol.Optional(CONF_WORKER_EXTRA_MANIFESTS, default=[]): vol.All(
             cv.ensure_list, [cv.string]
         ),
-        vol.Optional(CONF_WORKER_CORE_ADDRESS, default="localhost:50051"): cv.string,
+        vol.Required(CONF_WORKER_CORE_ADDRESS): cv.string,
         vol.Optional(CONF_WORKER_STOP_ON_SHUTDOWN, default=True): cv.boolean,
     }
 )

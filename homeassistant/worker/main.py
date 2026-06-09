@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 import signal
 import sys
@@ -260,8 +261,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--core-address",
-        default="localhost:50051",
-        help="gRPC address of the HA Core server (default: localhost:50051)",
+        default=os.environ.get("HA_WORKER_CORE_ADDRESS", "localhost:50051"),
+        help="gRPC address of the HA Core server (default: localhost:50051, env: HA_WORKER_CORE_ADDRESS)",
     )
     parser.add_argument(
         "--entry-id",
@@ -277,13 +278,13 @@ def main() -> None:
     parser.add_argument(
         "--worker-port",
         type=int,
-        default=50052,
-        help="Port for the worker gRPC server (default: 50052)",
+        default=int(os.environ.get("HA_WORKER_PORT", "50052")),
+        help="Port for the worker gRPC server (default: 50052, env: HA_WORKER_PORT)",
     )
     parser.add_argument(
         "--worker-name",
-        default="",
-        help="Name of this worker (used for registration with Core in persistent mode)",
+        default=os.environ.get("HA_WORKER_NAME", ""),
+        help="Name of this worker (used for registration with Core in persistent mode, env: HA_WORKER_NAME)",
     )
     parser.add_argument(
         "--debug",
