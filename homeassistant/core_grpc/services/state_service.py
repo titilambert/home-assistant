@@ -511,6 +511,29 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
             source=source,
         )
 
+    async def GetConfig(self, request, context):
+        """Return HA configuration to the remote worker."""
+        config = self.hass.config
+        units = config.units
+
+        return core_pb2.GetConfigResponse(
+            time_zone=str(config.time_zone),
+            language=getattr(config, "language", "en"),
+            latitude=float(getattr(config, "latitude", 0.0)),
+            longitude=float(getattr(config, "longitude", 0.0)),
+            country=getattr(config, "country", "") or "",
+            currency=getattr(config, "currency", "") or "",
+            temperature_unit=str(getattr(units, "temperature_unit", "\u00b0C")),
+            length_unit=str(getattr(units, "length_unit", "km")),
+            mass_unit=str(getattr(units, "mass_unit", "kg")),
+            pressure_unit=str(getattr(units, "pressure_unit", "hPa")),
+            volume_unit=str(getattr(units, "volume_unit", "L")),
+            wind_speed_unit=str(getattr(units, "wind_speed_unit", "km/h")),
+            accumulated_precipitation_unit=str(
+                getattr(units, "accumulated_precipitation_unit", "mm")
+            ),
+        )
+
     async def RegisterWorker(self, request, context):
         """Register a remote worker and store its gRPC client in hass.data."""
         from homeassistant.core_grpc.worker_client import WorkerClient

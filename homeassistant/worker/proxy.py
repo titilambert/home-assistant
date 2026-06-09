@@ -395,6 +395,10 @@ class _MockConfig:
         self.time_zone = "UTC"
         self.units = _MockUnits()
         self.language = "en"
+        self.latitude = 0.0
+        self.longitude = 0.0
+        self.country: str = ""
+        self.currency: str = ""
         # Some helpers (storage, entity_registry) need config_dir.  We point
         # to a throw-away temp directory — nothing should actually be written
         # there in normal operation because the relevant helpers are patched
@@ -959,6 +963,46 @@ class HomeAssistantGrpcProxy:
         return asyncio.ensure_future(
             asyncio.get_event_loop().run_in_executor(None, hassjob.target, *args)
         )
+
+    async def async_fetch_config(self) -> None:
+        """Fetch real HA config from Core and update self.config."""
+        from homeassistant.core_grpc.protos import core_pb2
+
+        try:
+            response = await self._stub.GetConfig(core_pb2.GetConfigRequest())
+            self.config.time_zone = response.time_zone
+            self.config.language = response.language
+            self.config.latitude = response.latitude
+            self.config.longitude = response.longitude
+            if response.country:
+                self.config.country = response.country
+            if response.currency:
+                self.config.currency = response.currency
+            # Update units
+            if response.temperature_unit:
+                self.config.units.temperature_unit = response.temperature_unit
+            if response.length_unit:
+                self.config.units.length_unit = response.length_unit
+            if response.mass_unit:
+                self.config.units.mass_unit = response.mass_unit
+            if response.pressure_unit:
+                self.config.units.pressure_unit = response.pressure_unit
+            if response.volume_unit:
+                self.config.units.volume_unit = response.volume_unit
+            if response.wind_speed_unit:
+                self.config.units.wind_speed_unit = response.wind_speed_unit
+            if response.accumulated_precipitation_unit:
+                self.config.units.accumulated_precipitation_unit = (
+                    response.accumulated_precipitation_unit
+                )
+            _LOGGER.info(
+                "(proxy) Config fetched from Core: tz=%s lang=%s units=%s",
+                response.time_zone,
+                response.language,
+                response.temperature_unit,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("(proxy) Could not fetch config from Core: %s", err)
 
     async def close(self) -> None:
         """Close the gRPC channel and any open aiohttp sessions."""

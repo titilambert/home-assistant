@@ -50,6 +50,12 @@ class KubernetesWorker(BaseWorker):
         self._extra_manifests: list[str] = conf.get(CONF_WORKER_EXTRA_MANIFESTS, [])
         self._resource_name: str = _sanitize_name(self._name)
         self._stop_on_shutdown: bool = conf.get("stop_on_shutdown", True)
+        # service_type: explicit config overrides auto-detection
+        # Auto-detection: NodePort if kubeconfig (external), ClusterIP if incluster
+        self._service_type: str = conf.get(
+            "service_type",
+            "NodePort" if (self._kubeconfig and not self._incluster) else "ClusterIP",
+        )
         self._stopping = False
         self._retry_task: asyncio.Task | None = None
         self._monitor_task: asyncio.Task | None = None
@@ -99,15 +105,14 @@ class KubernetesWorker(BaseWorker):
                         {
                             "name": "worker",
                             "image": self._image,
+                            "imagePullPolicy": "Always",
                         }
                     ],
                 },
             }
 
         # Default Service
-        svc_type = (
-            "NodePort" if self._kubeconfig and not self._incluster else "ClusterIP"
-        )
+        svc_type = self._service_type
         if service is None:
             service = {
                 "apiVersion": "v1",
@@ -137,6 +142,7 @@ class KubernetesWorker(BaseWorker):
         containers: list[dict] = pod["spec"]["containers"]
         if containers:
             containers[0]["image"] = self._image
+            containers[0]["imagePullPolicy"] = "Always"
             ha_env = [
                 {"name": "HA_MODE", "value": "worker"},
                 {"name": "HA_WORKER_CORE_ADDRESS", "value": self._core_address},
@@ -234,7 +240,7 @@ class KubernetesWorker(BaseWorker):
 
     def _resolve_address(self, v1) -> None:
         """Determine the gRPC address for this worker."""
-        if self._incluster:
+        if self._service_type == "ClusterIP":
             # ClusterIP — accessible via DNS from within the cluster
             self._address = f"{self._resource_name}.{self._namespace}.svc.cluster.local:{self._port}"
             _LOGGER.debug(

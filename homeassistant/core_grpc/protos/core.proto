@@ -9,6 +9,7 @@ service CoreService {
   rpc CallServiceOnRemote(CallServiceOnRemoteRequest) returns (CallServiceOnRemoteResponse);
   rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
   rpc GetEntry(GetEntryRequest) returns (GetEntryResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
 }
 
 service WorkerService {
@@ -85,6 +86,25 @@ message GetEntryResponse {
   bytes options = 4;  // JSON-serialized entry.options
   string title = 5;
   string source = 6;  // "builtin", "github:user/repo@ref", "hacs:domain"
+}
+
+message GetConfigRequest {}
+
+message GetConfigResponse {
+  string time_zone = 1;
+  string unit_system = 2;        // "metric" ou "us_customary"
+  string language = 3;
+  double latitude = 4;
+  double longitude = 5;
+  string country = 6;
+  string currency = 7;
+  string temperature_unit = 8;   // "°C" ou "°F"
+  string length_unit = 9;
+  string mass_unit = 10;
+  string pressure_unit = 11;
+  string volume_unit = 12;
+  string wind_speed_unit = 13;
+  string accumulated_precipitation_unit = 14;
 }
 
 message WorkerCallServiceRequest {

@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 import signal
 import sys
+from typing import Any
 
 # Make sure the repo root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -49,6 +50,11 @@ class _MinimalConfigEntry:
     def async_on_unload(self, func) -> None:
         """Register a callback to be called on unload."""
         self._on_unload.append(func)
+
+    def add_update_listener(self, listener) -> Any:
+        """Register a listener for option updates (no-op in worker)."""
+        # Options don't change in the worker — return a no-op cancel function
+        return lambda: None
 
     def async_create_background_task(self, hass, target, name, eager_start=True):
         """Create a background task."""
@@ -156,6 +162,9 @@ async def _main(
     from homeassistant.helpers.runtime_factory import DATA_IN_WORKER
 
     hass.data[DATA_IN_WORKER] = True
+
+    # Fetch real HA config from Core
+    await hass.async_fetch_config()
 
     # Start the worker gRPC server
     from homeassistant.core_grpc.worker_server import WorkerGrpcServer

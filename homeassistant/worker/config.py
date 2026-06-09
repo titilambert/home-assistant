@@ -98,6 +98,13 @@ KUBERNETES_WORKER_SCHEMA = vol.Schema(
         vol.Optional(CONF_WORKER_MAX_INTEGRATIONS): vol.All(int, vol.Range(min=1)),
         vol.Optional(CONF_WORKER_INCLUSTER, default=False): cv.boolean,
         vol.Optional(CONF_WORKER_KUBECONFIG): cv.string,
+        # service_type: Kubernetes Service type for the worker.
+        # If omitted, auto-detected:
+        #   - incluster: true  → ClusterIP  (HA runs inside K8s, internal DNS)
+        #   - kubeconfig: ...  → NodePort   (HA runs outside K8s, needs external access)
+        vol.Optional(CONF_WORKER_SERVICE_TYPE): vol.In(
+            ["ClusterIP", "NodePort", "LoadBalancer"]
+        ),
         vol.Optional(CONF_WORKER_MANIFEST): cv.string,
         vol.Optional(CONF_WORKER_EXTRA_MANIFESTS, default=[]): vol.All(
             cv.ensure_list, [cv.string]
