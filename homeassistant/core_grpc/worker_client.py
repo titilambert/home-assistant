@@ -26,7 +26,7 @@ class WorkerClient:
         from homeassistant.core_grpc.protos import core_pb2_grpc  # noqa: PLC0415
 
         self._channel = grpc.aio.insecure_channel(self.worker_address)
-        self._stub = core_pb2_grpc.WorkerServiceStub(self._channel)
+        self._stub = core_pb2_grpc.WorkerServiceStub(self._channel)  # type: ignore[no-untyped-call]
         _LOGGER.debug(
             "WorkerClient connected to %s (entry_id=%s)",
             self.worker_address,
@@ -55,7 +55,7 @@ class WorkerClient:
 
         try:
             response = await self._stub.CallService(
-                core_pb2.WorkerCallServiceRequest(
+                core_pb2.WorkerCallServiceRequest(  # type: ignore[attr-defined]
                     domain=domain,
                     service=service,
                     entity_id=entity_id,
@@ -91,7 +91,7 @@ class WorkerClient:
                     entity_id,
                     response.error,
                 )
-            return response.success
+            return bool(response.success)
 
     async def setup_entry(self, entry_id: str) -> bool:
         """Ask the worker to load an integration."""
@@ -104,13 +104,13 @@ class WorkerClient:
             return False
         try:
             response = await self._stub.SetupEntry(
-                core_pb2.WorkerSetupEntryRequest(entry_id=entry_id)
+                core_pb2.WorkerSetupEntryRequest(entry_id=entry_id)  # type: ignore[attr-defined]
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("SetupEntry failed for entry_id=%s: %s", entry_id, err)
             return False
         else:
-            return response.success
+            return bool(response.success)
 
     async def teardown_entry(self, entry_id: str) -> bool:
         """Ask the worker to unload an integration."""
@@ -120,13 +120,13 @@ class WorkerClient:
             return False
         try:
             response = await self._stub.TeardownEntry(
-                core_pb2.WorkerTeardownEntryRequest(entry_id=entry_id)
+                core_pb2.WorkerTeardownEntryRequest(entry_id=entry_id)  # type: ignore[attr-defined]
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("TeardownEntry failed for entry_id=%s: %s", entry_id, err)
             return False
         else:
-            return response.success
+            return bool(response.success)
 
     async def close(self) -> None:
         """Close the gRPC channel gracefully."""
