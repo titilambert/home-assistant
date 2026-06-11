@@ -22,15 +22,15 @@ def _import_grpc_modules() -> None:
     google._upb._message), which is a blocking I/O-like operation that must not run
     directly in the asyncio event loop thread.
     """
-    import grpc
-    import grpc.aio  # noqa: F401
+    import grpc  # noqa: PLC0415
+    import grpc.aio  # noqa: F401, PLC0415
 
-    from homeassistant.core_grpc.protos import (
+    from homeassistant.core_grpc.protos import (  # noqa: PLC0415
         core_pb2,  # noqa: F401
         core_pb2_grpc,  # noqa: F401
     )
-    from homeassistant.core_grpc.server import CoreGrpcServer  # noqa: F401
-    from homeassistant.core_grpc.services.state_service import (
+    from homeassistant.core_grpc.server import CoreGrpcServer  # noqa: F401, PLC0415
+    from homeassistant.core_grpc.services.state_service import (  # noqa: PLC0415
         CoreServiceServicer,  # noqa: F401
     )
 
@@ -56,7 +56,7 @@ async def async_start_grpc_server(
     await hass.async_add_executor_job(_import_grpc_modules)
 
     # Now that all modules are cached in sys.modules, these imports are instant.
-    from .server import CoreGrpcServer
+    from .server import CoreGrpcServer  # noqa: PLC0415
 
     server = CoreGrpcServer(hass, port=port)
     await server.start()

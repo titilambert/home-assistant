@@ -20,6 +20,7 @@ class WorkerServiceServicer(core_pb2_grpc.WorkerServiceServicer):
     """Handles WorkerService RPCs from Core."""
 
     def __init__(self, services_proxy: Any, hass_proxy: Any = None) -> None:
+        """Initialize the servicer with service proxy and optional hass proxy."""
         self._services = services_proxy  # ServicesProxy instance from worker/proxy.py
         self._hass = hass_proxy  # HomeAssistantGrpcProxy instance
         self._entries: dict[str, Any] = {}  # entry_id -> _MinimalConfigEntry
@@ -39,9 +40,9 @@ class WorkerServiceServicer(core_pb2_grpc.WorkerServiceServicer):
             return core_pb2.WorkerSetupEntryResponse(success=True)
 
         try:
-            from homeassistant.worker.main import _setup_integration
+            from homeassistant.worker.main import _setup_integration  # noqa: PLC0415
 
-            entry = await _setup_integration(self._hass, self._hass._stub, entry_id)
+            entry = await _setup_integration(self._hass, self._hass._stub, entry_id)  # noqa: SLF001
             if entry is None:
                 return core_pb2.WorkerSetupEntryResponse(
                     success=False,
@@ -52,7 +53,7 @@ class WorkerServiceServicer(core_pb2_grpc.WorkerServiceServicer):
             worker_address = (
                 f"localhost:{self._port if hasattr(self, '_port') else 50052}"
             )
-            await self._hass._stub.RegisterWorker(
+            await self._hass._stub.RegisterWorker(  # noqa: SLF001
                 core_pb2.RegisterWorkerRequest(
                     entry_id=entry_id,
                     worker_address=worker_address,
@@ -90,7 +91,7 @@ class WorkerServiceServicer(core_pb2_grpc.WorkerServiceServicer):
             service_data,
         )
 
-        handler = self._services._handlers.get((domain, service))
+        handler = self._services._handlers.get((domain, service))  # noqa: SLF001
         if handler is None:
             _LOGGER.warning("No handler for %s.%s", domain, service)
             return core_pb2.WorkerCallServiceResponse(
@@ -120,6 +121,7 @@ class WorkerGrpcServer:
         port: int = DEFAULT_WORKER_PORT,
         hass_proxy: Any = None,
     ) -> None:
+        """Initialize the gRPC server with service proxy, port and optional hass proxy."""
         self.port = port
         self._services = services_proxy
         self._hass = hass_proxy
@@ -130,7 +132,7 @@ class WorkerGrpcServer:
         """Start the gRPC server and begin accepting connections."""
         self._server = grpc.aio.server()
         self._servicer = WorkerServiceServicer(self._services, self._hass)
-        self._servicer._port = self.port  # give servicer access to the port
+        self._servicer._port = self.port  # noqa: SLF001 — give servicer access to the port
         core_pb2_grpc.add_WorkerServiceServicer_to_server(self._servicer, self._server)
         listen_addr = f"[::]:{self.port}"
         self._server.add_insecure_port(listen_addr)

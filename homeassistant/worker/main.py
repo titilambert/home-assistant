@@ -35,7 +35,7 @@ class _MinimalConfigEntry:
         config: dict,
         options: dict,
     ) -> None:
-        from homeassistant.config_entries import ConfigEntryState
+        from homeassistant.config_entries import ConfigEntryState  # noqa: PLC0415
 
         self.entry_id = entry_id
         self.unique_id = entry_id  # use entry_id as unique_id for the worker
@@ -75,7 +75,7 @@ class _MinimalConfigEntry:
 
 async def _setup_integration(hass, stub, entry_id: str) -> _MinimalConfigEntry | None:
     """Fetch config from Core and set up one integration."""
-    from homeassistant.core_grpc.protos import core_pb2
+    from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
     _LOGGER.info("Fetching config for entry_id=%s", entry_id)
     response = await stub.GetEntry(core_pb2.GetEntryRequest(entry_id=entry_id))
@@ -99,7 +99,7 @@ async def _setup_integration(hass, stub, entry_id: str) -> _MinimalConfigEntry |
     )
 
     # Import the integration module
-    import importlib
+    import importlib  # noqa: PLC0415
 
     try:
         module_name = f"homeassistant.components.{domain}"
@@ -109,7 +109,7 @@ async def _setup_integration(hass, stub, entry_id: str) -> _MinimalConfigEntry |
         return None
 
     # Patch namespace after import
-    from homeassistant.worker.proxy import patch_integration_namespace
+    from homeassistant.worker.proxy import patch_integration_namespace  # noqa: PLC0415
 
     patch_integration_namespace(module_name)
 
@@ -154,13 +154,13 @@ async def _main(
     )
 
     # Create the shared hass proxy
-    from homeassistant.worker.proxy import HomeAssistantGrpcProxy
+    from homeassistant.worker.proxy import HomeAssistantGrpcProxy  # noqa: PLC0415
 
     hass = HomeAssistantGrpcProxy(core_address=core_address, entry_id="")
 
     # Mark this process as a worker so that set_runtime_mode() becomes a no-op
     # and integrations cannot accidentally trigger an infinite worker-spawn loop.
-    from homeassistant.helpers.runtime_factory import DATA_IN_WORKER
+    from homeassistant.helpers.runtime_factory import DATA_IN_WORKER  # noqa: PLC0415
 
     hass.data[DATA_IN_WORKER] = True
 
@@ -168,18 +168,18 @@ async def _main(
     await hass.async_fetch_config()
 
     # Start the worker gRPC server
-    from homeassistant.core_grpc.worker_server import WorkerGrpcServer
+    from homeassistant.core_grpc.worker_server import WorkerGrpcServer  # noqa: PLC0415
 
     worker_server = WorkerGrpcServer(hass.services, port=worker_port, hass_proxy=hass)
     await worker_server.start()
 
     # Register the worker with Core (persistent mode — no entry_id yet)
     if not entry_ids and worker_name:
-        from homeassistant.core_grpc.protos import core_pb2 as _pb2
+        from homeassistant.core_grpc.protos import core_pb2 as _pb2  # noqa: PLC0415
 
         worker_address = f"localhost:{worker_port}"
         try:
-            await hass._stub.RegisterWorker(
+            await hass._stub.RegisterWorker(  # noqa: SLF001
                 _pb2.RegisterWorkerRequest(
                     entry_id=f"__worker__{worker_name}",
                     worker_address=worker_address,
@@ -194,16 +194,16 @@ async def _main(
             _LOGGER.warning("Could not register with Core: %s", err)
 
     # Set up each integration
-    from homeassistant.core_grpc.protos import core_pb2
+    from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
     entries = []
     for entry_id in entry_ids:
-        entry = await _setup_integration(hass, hass._stub, entry_id)
+        entry = await _setup_integration(hass, hass._stub, entry_id)  # noqa: SLF001
         if entry is not None:
             entries.append(entry)
             # Register this worker with the Core for this entry_id
             worker_address = f"localhost:{worker_port}"
-            await hass._stub.RegisterWorker(
+            await hass._stub.RegisterWorker(  # noqa: SLF001
                 core_pb2.RegisterWorkerRequest(
                     entry_id=entry_id,
                     worker_address=worker_address,

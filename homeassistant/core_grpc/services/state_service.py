@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -54,7 +55,7 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
         If no entity_id is present (rare for switch/light/… services) the
         handler falls through and logs a warning.
         """
-        from homeassistant.core import ServiceCall
+        from homeassistant.core import ServiceCall  # noqa: PLC0415
 
         async def _remote_handler(call: ServiceCall) -> None:
             _LOGGER.info(
@@ -134,7 +135,7 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
           create / update the device registry entry and link the entity to
           its device.
         """
-        import json
+        import json  # noqa: PLC0415
 
         entity_id: str = request.entity_id
         entry_id: str = request.entry_id  # may be empty for legacy callers
@@ -170,9 +171,9 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
         # ------------------------------------------------------------------
         if ha_unique_id:
             try:
-                import homeassistant.helpers.entity_registry as er_module
+                import homeassistant.helpers.entity_registry as er  # noqa: PLC0415
 
-                entity_registry = er_module.async_get(self.hass)
+                entity_registry = er.async_get(self.hass)
                 domain = (
                     entity_id.split(".", maxsplit=1)[0]
                     if "." in entity_id
@@ -187,14 +188,12 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
 
                 if platform_name:
                     # Convert entity_category string to EntityCategory enum
-                    from homeassistant.const import EntityCategory
+                    from homeassistant.const import EntityCategory  # noqa: PLC0415
 
                     ec: EntityCategory | None = None
                     if ha_entity_category:
-                        try:
+                        with contextlib.suppress(ValueError):
                             ec = EntityCategory(ha_entity_category)
-                        except ValueError:
-                            pass
 
                     existing = entity_registry.async_get_entity_id(
                         domain, platform_name, ha_unique_id
@@ -272,9 +271,9 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
             try:
                 device_info_dict = json.loads(ha_device_info_json)
 
-                import homeassistant.helpers.device_registry as dr_module
+                import homeassistant.helpers.device_registry as dr  # noqa: PLC0415
 
-                device_registry = dr_module.async_get(self.hass)
+                device_registry = dr.async_get(self.hass)
 
                 # Re-construct identifiers: stored as [[domain, id], …]
                 raw_identifiers = device_info_dict.get("identifiers", [])
@@ -304,9 +303,9 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
                     # both a unique_id and a valid device entry.
                     if ha_unique_id and entry_id:
                         try:
-                            import homeassistant.helpers.entity_registry as er_module
+                            import homeassistant.helpers.entity_registry as er  # noqa: PLC0415
 
-                            entity_registry = er_module.async_get(self.hass)
+                            entity_registry = er.async_get(self.hass)
                             domain = (
                                 entity_id.split(".")[0]
                                 if "." in entity_id
@@ -454,7 +453,7 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
         # happens so remote entities keep working.
         listener_key = f"grpc_service_listener_{domain}_{service}"
         if not self.hass.data.get(listener_key, False):
-            from homeassistant.const import EVENT_SERVICE_REGISTERED
+            from homeassistant.const import EVENT_SERVICE_REGISTERED  # noqa: PLC0415
 
             @callback
             def _on_service_registered(event) -> None:
@@ -492,8 +491,8 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
 
     async def GetEntry(self, request, context):
         """Return a config entry's domain, config and options to a remote worker."""
-        import json
-        import os
+        import json  # noqa: PLC0415
+        import os  # noqa: PLC0415
 
         entry_id = request.entry_id
         if not entry_id:
@@ -556,7 +555,7 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
 
     async def RegisterWorker(self, request, context):
         """Register a remote worker and store its gRPC client in hass.data."""
-        from homeassistant.core_grpc.worker_client import WorkerClient
+        from homeassistant.core_grpc.worker_client import WorkerClient  # noqa: PLC0415
 
         entry_id = request.entry_id
         worker_address = request.worker_address

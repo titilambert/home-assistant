@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -78,7 +79,7 @@ class DockerWorker(BaseWorker):
             self._name,
             self._port,
         )
-        asyncio.create_task(self._wait_for_ready())
+        asyncio.create_task(self._wait_for_ready())  # noqa: RUF006
 
     def _start_sync(self) -> None:
         """Synchronous Docker operations (run in executor)."""
@@ -88,10 +89,8 @@ class DockerWorker(BaseWorker):
 
             # Check if container already exists
             existing = None
-            try:
+            with contextlib.suppress(Exception):
                 existing = client.containers.get(self._container_name)
-            except Exception:  # noqa: BLE001
-                pass  # Container does not exist
 
             if existing is not None:
                 existing.reload()
@@ -147,18 +146,16 @@ class DockerWorker(BaseWorker):
                 self._address,
             )
 
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to start Docker worker '%s': %s",
+        except Exception:
+            _LOGGER.exception(
+                "Failed to start Docker worker '%s'",
                 self._name,
-                err,
-                exc_info=True,
             )
             self._status = WORKER_STATUS_UNAVAILABLE
 
     async def _wait_for_ready(self, timeout: int = 60, interval: float = 2.0) -> None:
         """Poll until the gRPC port is reachable, then mark RUNNING."""
-        import time
+        import time  # noqa: PLC0415
 
         deadline = time.monotonic() + timeout
         while not self._stopping and time.monotonic() < deadline:

@@ -14,6 +14,7 @@ class NotImplementedWorker(BaseWorker):
     """Placeholder for Docker and Kubernetes workers (coming in Phase 4/5)."""
 
     async def async_start(self) -> None:
+        """Mark worker as not-implemented and log a warning."""
         self._status = WORKER_STATUS_NOT_IMPLEMENTED
         _LOGGER.warning(
             "Worker '%s' type '%s' is not yet implemented (Phase 4/5). Skipping.",
@@ -22,4 +23,4 @@ class NotImplementedWorker(BaseWorker):
         )
 
     async def async_stop(self) -> None:
-        pass
+        """Stop the worker (no-op for unimplemented types)."""

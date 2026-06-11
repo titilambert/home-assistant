@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -10,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from ..const import (
+from homeassistant.worker.const import (
     CONF_WORKER_EXTRA_MANIFESTS,
     CONF_WORKER_INCLUSTER,
     CONF_WORKER_KUBECONFIG,
@@ -18,7 +19,7 @@ from ..const import (
     WORKER_STATUS_RUNNING,
     WORKER_STATUS_UNAVAILABLE,
 )
-from .base import BaseWorker
+from homeassistant.worker.workers.base import BaseWorker
 
 _LOGGER = logging.getLogger(__name__)
 RETRY_INTERVAL = 30
@@ -35,7 +36,7 @@ class KubernetesWorker(BaseWorker):
     def __init__(self, hass: HomeAssistant, conf: dict) -> None:
         """Initialize the Kubernetes worker."""
         super().__init__(hass, conf)
-        from ..config import (  # noqa: PLC0415
+        from homeassistant.worker.config import (  # noqa: PLC0415
             CONF_WORKER_IMAGE,
             CONF_WORKER_NAMESPACE,
             CONF_WORKER_PORT,
@@ -176,12 +177,10 @@ class KubernetesWorker(BaseWorker):
 
             # Check if pod already exists
             existing_pod = None
-            try:
+            with contextlib.suppress(Exception):
                 existing_pod = v1.read_namespaced_pod(
                     name=self._resource_name, namespace=self._namespace
                 )
-            except Exception:  # noqa: BLE001
-                pass
 
             if existing_pod is not None:
                 phase = existing_pod.status.phase
@@ -232,10 +231,8 @@ class KubernetesWorker(BaseWorker):
             for manifest_path in self._extra_manifests:
                 self._apply_extra_manifest(manifest_path)
 
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to start K8s worker '%s': %s", self._name, err, exc_info=True
-            )
+        except Exception:
+            _LOGGER.exception("Failed to start K8s worker '%s'", self._name)
             self._status = WORKER_STATUS_UNAVAILABLE
 
     def _resolve_address(self, v1) -> None:
@@ -309,9 +306,10 @@ class KubernetesWorker(BaseWorker):
             pod = v1.read_namespaced_pod(
                 name=self._resource_name, namespace=self._namespace
             )
-            return pod.status.phase == "Running"
         except Exception:  # noqa: BLE001
             return False
+        else:
+            return pod.status.phase == "Running"
 
     def _stop_sync(self) -> None:
         """Delete Pod and Service synchronously."""
@@ -354,7 +352,7 @@ class KubernetesWorker(BaseWorker):
             self._name,
             self._port,
         )
-        asyncio.create_task(self._wait_for_ready())
+        asyncio.create_task(self._wait_for_ready())  # noqa: RUF006
 
     async def _wait_for_ready(self, timeout: int = 120, interval: float = 5.0) -> None:
         """Poll until the gRPC port is reachable or the timeout expires."""

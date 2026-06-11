@@ -29,18 +29,22 @@ class BaseWorker(ABC):
 
     @property
     def name(self) -> str:
+        """Return the worker name."""
         return self._name
 
     @property
     def worker_type(self) -> str:
+        """Return the worker type string."""
         return self._worker_type
 
     @property
     def status(self) -> str:
+        """Return the current worker status."""
         return self._status
 
     @property
     def address(self) -> str:
+        """Return the gRPC address of this worker."""
         return self._address
 
     @property
@@ -57,16 +61,20 @@ class BaseWorker(ABC):
 
     @property
     def active_integrations(self) -> int:
+        """Return the number of active integrations on this worker."""
         return self._active_integrations
 
     @property
     def max_integrations(self) -> int | None:
+        """Return the maximum number of integrations allowed, or None for unlimited."""
         return self._max_integrations
 
     def increment_integrations(self) -> None:
+        """Increment the active integration count by one."""
         self._active_integrations += 1
 
     def decrement_integrations(self) -> None:
+        """Decrement the active integration count by one (minimum 0)."""
         self._active_integrations = max(0, self._active_integrations - 1)
 
     async def async_check_reachable(self) -> bool:
@@ -74,15 +82,16 @@ class BaseWorker(ABC):
         if not self._address:
             return False
         try:
-            import grpc
-            import grpc.aio
+            import grpc  # noqa: PLC0415
+            import grpc.aio  # noqa: PLC0415
 
             channel = grpc.aio.insecure_channel(self._address)
             await asyncio.wait_for(channel.channel_ready(), timeout=5.0)
             await channel.close()
-            return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
+        else:
+            return True
 
     async def async_reload_waiting_entries(self) -> None:
         """Reload config entries that were waiting for this worker.

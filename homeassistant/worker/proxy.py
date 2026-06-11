@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Coroutine
+import contextlib
 import logging
 import tempfile
 from typing import Any
@@ -51,7 +52,6 @@ def _proxy_async_get_clientsession(
         )
         _LOGGER.debug("(proxy) Created shared aiohttp.ClientSession")
     sessions = hass.data[_DATA_PROXY_SESSION]
-    key = "default"
     return sessions["default"]
 
 
@@ -73,7 +73,7 @@ def _apply_global_patches() -> None:
     #    Pi-hole calls this to rename unique IDs.  The real entity registry
     #    lives in Core; the worker must not try to instantiate it.
     # ------------------------------------------------------------------
-    import homeassistant.helpers.entity_registry as _er
+    import homeassistant.helpers.entity_registry as er  # noqa: PLC0415
 
     async def _noop_async_migrate_entries(
         hass: Any,
@@ -85,58 +85,58 @@ def _apply_global_patches() -> None:
             entry_id,
         )
 
-    _er.async_migrate_entries = _noop_async_migrate_entries  # type: ignore[assignment]
+    er.async_migrate_entries = _noop_async_migrate_entries  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
     # 2. aiohttp_client.async_get_clientsession → proxy session factory
     # ------------------------------------------------------------------
-    import homeassistant.helpers.aiohttp_client as _aiohttp_client
+    import homeassistant.helpers.aiohttp_client as _aiohttp_client  # noqa: PLC0415
 
     _aiohttp_client.async_get_clientsession = _proxy_async_get_clientsession  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
     # 3. device_registry / entity_registry / issue_registry → mock singletons
     # ------------------------------------------------------------------
-    import homeassistant.helpers.device_registry as _dr
-    import homeassistant.helpers.issue_registry as _ir
+    import homeassistant.helpers.device_registry as dr  # noqa: PLC0415
+    import homeassistant.helpers.issue_registry as ir  # noqa: PLC0415
 
     _dr_instance = _MockDeviceRegistry()
-    _dr.async_get = lambda hass: _dr_instance  # type: ignore[assignment]
+    dr.async_get = lambda hass: _dr_instance  # type: ignore[assignment]
 
     _er_instance = _MockEntityRegistry()
-    _er.async_get = lambda hass: _er_instance  # type: ignore[assignment]
+    er.async_get = lambda hass: _er_instance  # type: ignore[assignment]
 
     # Keep a module-level reference so _setup_entity can reach it without a
     # hass reference (the lambda above captures _er_instance already, but we
     # need it accessible from _setup_entity which only has hass).
-    import homeassistant.worker.proxy as _self_module
+    import homeassistant.worker.proxy as _self_module  # noqa: PLC0415, PLW0406
 
-    _self_module._GLOBAL_ENTITY_REGISTRY = _er_instance  # type: ignore[attr-defined]
+    _self_module._GLOBAL_ENTITY_REGISTRY = _er_instance  # noqa: SLF001 type: ignore[attr-defined]
 
-    _ir.async_create_issue = lambda hass, *args, **kwargs: None  # type: ignore[assignment]
-    _ir.async_delete_issue = lambda hass, *args, **kwargs: None  # type: ignore[assignment]
+    ir.async_create_issue = lambda hass, *args, **kwargs: None  # type: ignore[assignment]
+    ir.async_delete_issue = lambda hass, *args, **kwargs: None  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
     # 4. dispatcher → local in-memory implementation
     # ------------------------------------------------------------------
-    import homeassistant.helpers.dispatcher as _dispatcher_module
+    import homeassistant.helpers.dispatcher as _dispatcher_module  # noqa: PLC0415
 
     _dispatcher_module.async_dispatcher_connect = (  # type: ignore[assignment]
-        lambda hass, signal, target: hass._dispatcher.connect(signal, target)
+        lambda hass, signal, target: hass._dispatcher.connect(signal, target)  # noqa: SLF001
     )
     _dispatcher_module.dispatcher_send = (  # type: ignore[assignment]
-        lambda hass, signal, *args: hass._dispatcher.send(signal, *args)
+        lambda hass, signal, *args: hass._dispatcher.send(signal, *args)  # noqa: SLF001
     )
     _dispatcher_module.async_dispatcher_send = (  # type: ignore[assignment]
-        lambda hass, signal, *args: hass._dispatcher.send(signal, *args)
+        lambda hass, signal, *args: hass._dispatcher.send(signal, *args)  # noqa: SLF001
     )
 
     # ------------------------------------------------------------------
     # 5. event helpers → lightweight timer shims
     # ------------------------------------------------------------------
-    from datetime import timedelta as _timedelta
+    from datetime import timedelta as _timedelta  # noqa: PLC0415
 
-    import homeassistant.helpers.event as _event_module
+    import homeassistant.helpers.event as _event_module  # noqa: PLC0415
 
     def _async_track_time_interval(
         hass: Any, action: Any, interval: Any, **kwargs: Any
@@ -172,7 +172,7 @@ def _apply_global_patches() -> None:
         def _callback() -> None:
             result = action(None)
             if asyncio.iscoroutine(result):
-                asyncio.create_task(result)
+                asyncio.create_task(result)  # noqa: RUF006
 
         handle = loop.call_later(delay, _callback)
         return handle.cancel
@@ -182,7 +182,7 @@ def _apply_global_patches() -> None:
     # ------------------------------------------------------------------
     # 6. helpers.storage.Store → in-memory mock (no disk I/O)
     # ------------------------------------------------------------------
-    import homeassistant.helpers.storage as _storage_module
+    import homeassistant.helpers.storage as _storage_module  # noqa: PLC0415
 
     _storage_module.Store = _MockStore  # type: ignore[assignment]
 
@@ -192,7 +192,7 @@ def _apply_global_patches() -> None:
     #    entity-level services. In the worker there is no real platform
     #    context, so we return a no-op mock instead of raising RuntimeError.
     # ------------------------------------------------------------------
-    import homeassistant.helpers.entity_platform as _ep_module
+    import homeassistant.helpers.entity_platform as _ep_module  # noqa: PLC0415
 
     class _MockEntityPlatform:
         """No-op entity platform for the remote worker."""
@@ -232,7 +232,7 @@ def patch_integration_namespace(module_name: str) -> None:
         module_name: Fully-qualified module name, e.g.
                      ``"homeassistant.components.pi_hole"``.
     """
-    import sys
+    import sys  # noqa: PLC0415
 
     mod = sys.modules.get(module_name)
     if mod is None:
@@ -276,7 +276,7 @@ class _MockDeviceRegistry:
 
     def async_get_or_create(self, **kwargs: Any) -> _MockDeviceEntry:
         """Return a minimal device entry stub with a stable fake device_id."""
-        import uuid
+        import uuid  # noqa: PLC0415
 
         identifiers = kwargs.get("identifiers", set())
         device_id = str(
@@ -359,10 +359,8 @@ class _LocalDispatcher:
         self._listeners.setdefault(signal, []).append(target)
 
         def _remove() -> None:
-            try:
+            with contextlib.suppress(ValueError):
                 self._listeners.get(signal, []).remove(target)
-            except ValueError:
-                pass
 
         return _remove
 
@@ -397,7 +395,7 @@ class _MockStore:
             await asyncio.sleep(delay)
             self._data = data_func()
 
-        asyncio.create_task(_save())
+        asyncio.create_task(_save())  # noqa: RUF006
 
 
 class _MockUnits:
@@ -450,6 +448,7 @@ class StatesProxy:
     """Proxy for hass.states — forwards async_set to Core via gRPC."""
 
     def __init__(self, stub: Any, entry_id: str = "") -> None:
+        """Initialize the states proxy with a gRPC stub and optional entry ID."""
         self._stub = stub
         self._entry_id = entry_id
 
@@ -465,14 +464,14 @@ class StatesProxy:
         # Use _entry_id if provided (from _push_state), otherwise fall back to
         # the proxy-level entry_id (single-integration mode).
         entry_id = _entry_id or self._entry_id
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006
             self._async_set(entity_id, new_state, attributes or {}, entry_id)
         )
 
     async def _async_set(
         self, entity_id: str, new_state: str, attributes: dict, entry_id: str = ""
     ) -> None:
-        from homeassistant.core_grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
         try:
             await self._stub.SetState(
@@ -496,6 +495,7 @@ class ServicesProxy:
     """Proxy for hass.services — forwards registrations to Core via gRPC."""
 
     def __init__(self, stub: Any, entry_id: str) -> None:
+        """Initialize the services proxy with a gRPC stub and entry ID."""
         self._stub = stub
         self._entry_id = entry_id
         self._handlers: dict[tuple[str, str], Callable] = {}
@@ -512,10 +512,10 @@ class ServicesProxy:
             "(proxy) ServicesProxy.async_register called: %s.%s", domain, service
         )
         self._handlers[(domain, service)] = service_func
-        asyncio.create_task(self._notify_core(domain, service))
+        asyncio.create_task(self._notify_core(domain, service))  # noqa: RUF006
 
     async def _notify_core(self, domain: str, service: str) -> None:
-        from homeassistant.core_grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
         try:
             await self._stub.RegisterService(
@@ -554,9 +554,9 @@ class _MockConfigEntries:
     def async_update_entry(self, entry: Any, **kwargs: Any) -> None:
         _LOGGER.debug("(proxy) config_entries.async_update_entry (no-op)")
 
-    async def async_forward_entry_setups(self, entry: Any, platforms: list) -> None:
+    async def async_forward_entry_setups(self, entry: Any, platforms: list) -> None:  # noqa: C901
         """Set up each platform and wire coordinator updates to gRPC SetState calls."""
-        import sys
+        import sys  # noqa: PLC0415
 
         domain = entry.domain
         _LOGGER.debug(
@@ -571,7 +571,7 @@ class _MockConfigEntries:
             try:
                 # Import the platform module
                 if module_name not in sys.modules:
-                    import importlib
+                    import importlib  # noqa: PLC0415
 
                     importlib.import_module(module_name)
                 platform_module = sys.modules[module_name]
@@ -618,8 +618,8 @@ class _MockConfigEntries:
                 config_entry_id: str,
             ) -> None:
                 """Attach hass to entity and subscribe to coordinator updates."""
-                from homeassistant.helpers.entity import EntityPlatformState
-                from homeassistant.helpers.entity_platform import PlatformData
+                from homeassistant.helpers.entity import EntityPlatformState  # noqa: I001, PLC0415
+                from homeassistant.helpers.entity_platform import PlatformData  # noqa: PLC0415
 
                 entity.hass = hass
 
@@ -653,7 +653,7 @@ class _MockConfigEntries:
                     not getattr(entity, "entity_id", None)
                     or entity.entity_id == "unknown.unknown"
                 ):
-                    import re
+                    import re  # noqa: PLC0415
 
                     # Resolve the best available name string.
                     raw_name: str | None = None
@@ -703,7 +703,7 @@ class _MockConfigEntries:
                 # _push_state() can retrieve the unique_id for transmission.
                 unique_id_val = getattr(entity, "unique_id", None)
                 if unique_id_val:
-                    import homeassistant.worker.proxy as _rh
+                    import homeassistant.worker.proxy as _rh  # noqa: PLC0415, PLW0406
 
                     er = getattr(_rh, "_GLOBAL_ENTITY_REGISTRY", None)
                     if er is not None:
@@ -757,7 +757,7 @@ class _MockConfigEntries:
                     # Store the unsubscribe function on the entity for cleanup
                     entity._remote_remove_listener = remove_listener  # noqa: SLF001
 
-            def _push_state(hass: Any, entity: Any, config_entry_id: str = "") -> None:
+            def _push_state(hass: Any, entity: Any, config_entry_id: str = "") -> None:  # noqa: C901
                 """Read entity state and push it to Core via gRPC (hass.states.async_set).
 
                 In addition to the integration-defined extra_state_attributes we
@@ -772,17 +772,15 @@ class _MockConfigEntries:
                 with real integration attributes.  The Core servicer strips them
                 before storing the state in hass.states.
                 """
-                import json
+                import json  # noqa: PLC0415
 
                 try:
                     state = entity.state
                     if state is None:
                         return
                     attrs: dict = {}
-                    try:
+                    with contextlib.suppress(Exception):
                         attrs = dict(entity.extra_state_attributes or {})
-                    except Exception:  # noqa: BLE001
-                        pass
                     entity_id = getattr(entity, "entity_id", None)
                     if not entity_id:
                         return
@@ -817,8 +815,8 @@ class _MockConfigEntries:
                         )
 
                         if translation_key and platform_name_str:
-                            import json as _json
-                            import pathlib as _pl
+                            import json as _json  # noqa: PLC0415
+                            import pathlib as _pl  # noqa: PLC0415
 
                             # Find strings.json for this integration
                             components_path = (
@@ -956,12 +954,10 @@ class _MockConfigEntries:
                         _entry_id=config_entry_id,
                     )
                     _LOGGER.debug("(proxy) pushed state %s = %s", entity_id, state)
-                except Exception as err:
-                    _LOGGER.error(
-                        "(proxy) _push_state failed for %s: %s",
+                except Exception:
+                    _LOGGER.exception(
+                        "(proxy) _push_state failed for %s",
                         entity,
-                        err,
-                        exc_info=True,
                     )
 
             try:
@@ -1002,7 +998,7 @@ class HomeAssistantGrpcProxy:
         # Apply global module-level patches before any integration code can run.
         _apply_global_patches()
 
-        from homeassistant.core_grpc.protos import core_pb2_grpc
+        from homeassistant.core_grpc.protos import core_pb2_grpc  # noqa: PLC0415
 
         self._channel = grpc.aio.insecure_channel(core_address)
         self._stub = core_pb2_grpc.CoreServiceStub(self._channel)
@@ -1015,7 +1011,7 @@ class HomeAssistantGrpcProxy:
         self.loop = asyncio.get_event_loop()
         self.is_stopping = False
         self.loop_thread_id = (
-            self.loop._thread_id if hasattr(self.loop, "_thread_id") else 0
+            self.loop._thread_id if hasattr(self.loop, "_thread_id") else 0  # noqa: SLF001
         )
         # Local dispatcher — used by the patched homeassistant.helpers.dispatcher shims
         self._dispatcher = _LocalDispatcher()
@@ -1037,7 +1033,7 @@ class HomeAssistantGrpcProxy:
         self, hassjob: Any, *args: Any, background: bool = False
     ) -> Any:
         """Run a HassJob from within the event loop."""
-        from homeassistant.core import HassJobType
+        from homeassistant.core import HassJobType  # noqa: PLC0415
 
         if hassjob.job_type is HassJobType.Coroutinefunction:
             return asyncio.ensure_future(hassjob.target(*args))
@@ -1049,7 +1045,7 @@ class HomeAssistantGrpcProxy:
 
     async def async_fetch_config(self) -> None:
         """Fetch real HA config from Core and update self.config."""
-        from homeassistant.core_grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
         try:
             response = await self._stub.GetConfig(core_pb2.GetConfigRequest())

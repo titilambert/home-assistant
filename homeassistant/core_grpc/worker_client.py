@@ -23,7 +23,7 @@ class WorkerClient:
 
     async def connect(self) -> None:
         """Open the gRPC channel and create the stub."""
-        from homeassistant.core_grpc.protos import core_pb2_grpc
+        from homeassistant.core_grpc.protos import core_pb2_grpc  # noqa: PLC0415
 
         self._channel = grpc.aio.insecure_channel(self.worker_address)
         self._stub = core_pb2_grpc.WorkerServiceStub(self._channel)
@@ -44,7 +44,7 @@ class WorkerClient:
 
         Returns True on success, False on any error.
         """
-        from homeassistant.core_grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
         if self._stub is None:
             _LOGGER.error(
@@ -62,16 +62,6 @@ class WorkerClient:
                     service_data={k: str(v) for k, v in service_data.items()},
                 )
             )
-            if not response.success:
-                _LOGGER.warning(
-                    "Worker %s returned failure for %s.%s on %s: %s",
-                    self.entry_id,
-                    domain,
-                    service,
-                    entity_id,
-                    response.error,
-                )
-            return response.success
         except grpc.aio.AioRpcError as err:
             _LOGGER.error(
                 "gRPC error calling %s.%s on worker %s: [%s] %s",
@@ -91,10 +81,21 @@ class WorkerClient:
                 err,
             )
             return False
+        else:
+            if not response.success:
+                _LOGGER.warning(
+                    "Worker %s returned failure for %s.%s on %s: %s",
+                    self.entry_id,
+                    domain,
+                    service,
+                    entity_id,
+                    response.error,
+                )
+            return response.success
 
     async def setup_entry(self, entry_id: str) -> bool:
         """Ask the worker to load an integration."""
-        from homeassistant.core_grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
         if self._stub is None:
             _LOGGER.error(
@@ -105,14 +106,15 @@ class WorkerClient:
             response = await self._stub.SetupEntry(
                 core_pb2.WorkerSetupEntryRequest(entry_id=entry_id)
             )
-            return response.success
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("SetupEntry failed for entry_id=%s: %s", entry_id, err)
             return False
+        else:
+            return response.success
 
     async def teardown_entry(self, entry_id: str) -> bool:
         """Ask the worker to unload an integration."""
-        from homeassistant.core_grpc.protos import core_pb2
+        from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
 
         if self._stub is None:
             return False
@@ -120,10 +122,11 @@ class WorkerClient:
             response = await self._stub.TeardownEntry(
                 core_pb2.WorkerTeardownEntryRequest(entry_id=entry_id)
             )
-            return response.success
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("TeardownEntry failed for entry_id=%s: %s", entry_id, err)
             return False
+        else:
+            return response.success
 
     async def close(self) -> None:
         """Close the gRPC channel gracefully."""

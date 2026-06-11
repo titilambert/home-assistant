@@ -470,7 +470,7 @@ async def async_load_base_functionality(hass: core.HomeAssistant) -> bool:
     # Horizontal scaling POC: start Core gRPC server early so remote integrations
     # can connect as soon as config entries are set up.
     try:
-        from homeassistant.core_grpc import async_start_grpc_server
+        from homeassistant.core_grpc import async_start_grpc_server  # noqa: PLC0415
 
         await async_start_grpc_server(hass)
     except Exception:  # noqa: BLE001

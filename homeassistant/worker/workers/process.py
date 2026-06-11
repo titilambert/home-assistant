@@ -65,15 +65,15 @@ class ProcessWorker(BaseWorker):
                 self._port,
             )
             # Wait for gRPC port to be ready before marking RUNNING
-            asyncio.create_task(self._wait_for_ready())
-        except Exception as err:
+            asyncio.create_task(self._wait_for_ready())  # noqa: RUF006
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error("Failed to start process worker '%s': %s", self._name, err)
             self._status = WORKER_STATUS_UNAVAILABLE
             self._schedule_retry()
 
     async def _wait_for_ready(self, timeout: int = 60, interval: float = 1.0) -> None:
         """Poll until the gRPC port is reachable, then mark RUNNING."""
-        import time
+        import time  # noqa: PLC0415
 
         deadline = time.monotonic() + timeout
         while not self._stopping and time.monotonic() < deadline:
@@ -85,7 +85,7 @@ class ProcessWorker(BaseWorker):
                     self._name,
                     self._port,
                 )
-                asyncio.create_task(self._monitor())
+                asyncio.create_task(self._monitor())  # noqa: RUF006
                 await self.async_reload_waiting_entries()
                 return
             await asyncio.sleep(interval)

@@ -680,6 +680,55 @@ class ConfigEntry[_DataT = Any]:
         finally:
             current_entry.set(None)
 
+    async def _async_setup_remote_if_needed(
+        self,
+        hass: HomeAssistant,
+        component: Any,
+        domain_is_integration: bool,
+    ) -> bool:
+        """Route config entry setup to a remote worker or run locally."""
+        from homeassistant.helpers.runtime_factory import (  # noqa: PLC0415
+            async_setup_remote,
+            is_remote,
+            set_runtime_mode,
+        )
+
+        # Sync runtime_mode from entry.data to hass.data
+        runtime_mode = self.data.get("runtime_mode", "local")
+        set_runtime_mode(hass, self.entry_id, runtime_mode)
+
+        if is_remote(hass, self) and domain_is_integration:
+            from homeassistant.worker.const import DATA_WORKER_REGISTRY  # noqa: I001, PLC0415
+
+            worker_name = self.data.get("worker_name")
+            registry = hass.data.get(DATA_WORKER_REGISTRY)
+
+            if registry and worker_name:
+                worker = registry.get_worker(worker_name)
+                _LOGGER.debug(
+                    "Horizontal scaling: worker=%s status=%s has_capacity=%s",
+                    worker_name,
+                    worker.status if worker else "not found",
+                    worker.has_capacity if worker else "N/A",
+                )
+                if worker and worker.status == "running":
+                    return await async_setup_remote(
+                        hass,
+                        self,
+                        core_address=worker.core_address,
+                        worker_address=worker.address,
+                        worker=worker,
+                    )
+                _LOGGER.error(
+                    "Worker '%s' is not available for entry %s",
+                    worker_name,
+                    self.entry_id,
+                )
+                return False
+            # Fallback: no worker registry → old subprocess behaviour
+            return await async_setup_remote(hass, self)
+        return await component.async_setup_entry(hass, self)
+
     async def __async_setup_with_context(
         self,
         hass: HomeAssistant,
@@ -766,53 +815,9 @@ class ConfigEntry[_DataT = Any]:
             with async_start_setup(
                 hass, integration=self.domain, group=self.entry_id, phase=setup_phase
             ):
-                # Horizontal scaling: check if this entry should run in a remote worker.
-                # This is done at the config_entries level so integrations don't need
-                # to know about the worker infrastructure (zero code change in integrations).
-                from homeassistant.helpers.runtime_factory import (
-                    async_setup_remote,
-                    is_remote,
-                    set_runtime_mode,
+                result = await self._async_setup_remote_if_needed(
+                    hass, component, domain_is_integration
                 )
-
-                # Sync runtime_mode from entry.data to hass.data
-                runtime_mode = self.data.get("runtime_mode", "local")
-                set_runtime_mode(hass, self.entry_id, runtime_mode)
-
-                if is_remote(hass, self) and domain_is_integration:
-                    from homeassistant.worker.const import DATA_WORKER_REGISTRY
-
-                    worker_name = self.data.get("worker_name")
-                    registry = hass.data.get(DATA_WORKER_REGISTRY)
-
-                    if registry and worker_name:
-                        worker = registry.get_worker(worker_name)
-                        _LOGGER.debug(
-                            "Horizontal scaling: worker=%s status=%s has_capacity=%s",
-                            worker_name,
-                            worker.status if worker else "not found",
-                            worker.has_capacity if worker else "N/A",
-                        )
-                        if worker and worker.status == "running":
-                            result = await async_setup_remote(
-                                hass,
-                                self,
-                                core_address=worker.core_address,
-                                worker_address=worker.address,
-                                worker=worker,
-                            )
-                        else:
-                            _LOGGER.error(
-                                "Worker '%s' is not available for entry %s",
-                                worker_name,
-                                self.entry_id,
-                            )
-                            result = False
-                    else:
-                        # Fallback: no worker registry → old subprocess behaviour
-                        result = await async_setup_remote(hass, self)
-                else:
-                    result = await component.async_setup_entry(hass, self)
 
             if not isinstance(result, bool):
                 _LOGGER.error(  # type: ignore[unreachable]
@@ -1057,10 +1062,10 @@ class ConfigEntry[_DataT = Any]:
                 # registered in Core. Instead:
                 # 1. Remove states that were pushed by the worker
                 # 2. Let the on_unload callbacks handle worker teardown
-                from homeassistant.helpers import entity_registry as er_module
+                from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
 
-                entity_registry = er_module.async_get(hass)
-                remote_entities = er_module.async_entries_for_config_entry(
+                entity_registry = er.async_get(hass)
+                remote_entities = er.async_entries_for_config_entry(
                     entity_registry, self.entry_id
                 )
                 for er_entry in remote_entities:
@@ -3385,7 +3390,7 @@ class ConfigFlow(ConfigEntryBaseFlow):
             and "runtime_mode" not in data
         ):
             try:
-                from homeassistant.worker.const import DATA_WORKER_REGISTRY
+                from homeassistant.worker.const import DATA_WORKER_REGISTRY  # noqa: I001, PLC0415
 
                 registry = self.hass.data.get(DATA_WORKER_REGISTRY)
                 available_workers = registry.get_available_workers() if registry else []
