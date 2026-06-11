@@ -17,6 +17,7 @@ class ProcessWorker(BaseWorker):
     """Worker that runs as a local subprocess."""
 
     def __init__(self, hass, conf: dict) -> None:
+        """Initialize the process worker."""
         super().__init__(hass, conf)
         self._port: int = conf["port"]
         self._address = f"localhost:{self._port}"

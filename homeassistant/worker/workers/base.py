@@ -16,6 +16,7 @@ class BaseWorker(ABC):
     """Abstract base class for all worker types."""
 
     def __init__(self, hass: HomeAssistant, conf: dict) -> None:
+        """Initialize the base worker."""
         self._hass = hass
         self._conf = conf
         self._name: str = conf["name"]

@@ -16,6 +16,7 @@ class RemoteWorker(BaseWorker):
     """Worker that connects to an already-running remote process."""
 
     def __init__(self, hass, conf: dict) -> None:
+        """Initialize the remote worker."""
         super().__init__(hass, conf)
         self._address = conf["address"]
         self._retry_task: asyncio.Task | None = None
