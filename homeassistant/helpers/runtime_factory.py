@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -91,7 +92,7 @@ async def async_setup_remote(
                 return False
 
         # Send SetupEntry to the worker via gRPC so it loads the integration.
-        from homeassistant.core_grpc.worker_client import WorkerClient
+        from homeassistant.core_grpc.worker_client import WorkerClient  # noqa: PLC0415
 
         client = WorkerClient(entry.entry_id, worker_address)
         await client.connect()
@@ -123,16 +124,14 @@ async def async_setup_remote(
         worker_addresses[entry.entry_id] = worker_address
 
         # Store client in DATA_WORKER_CLIENTS for service routing
-        from homeassistant.core_grpc.services.state_service import DATA_WORKER_CLIENTS
+        from homeassistant.core_grpc.services.state_service import DATA_WORKER_CLIENTS  # noqa: PLC0415, I001
 
         clients: dict = hass.data.setdefault(DATA_WORKER_CLIENTS, {})
         clients[entry.entry_id] = client
 
         async def _teardown_worker() -> None:
-            try:
+            with contextlib.suppress(Exception):
                 await client.teardown_entry(entry.entry_id)
-            except Exception:  # noqa: BLE001
-                pass
             await client.close()
             worker_addresses.pop(entry.entry_id, None)
             clients.pop(entry.entry_id, None)
