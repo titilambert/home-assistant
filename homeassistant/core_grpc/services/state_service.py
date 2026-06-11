@@ -155,6 +155,12 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
         ha_friendly_name: str | None = raw_attrs.pop("_ha_friendly_name", None)
         ha_unique_id: str | None = raw_attrs.pop("_ha_unique_id", None)
         ha_device_info_json: str | None = raw_attrs.pop("_ha_device_info", None)
+        ha_translation_key: str | None = raw_attrs.pop("_ha_translation_key", None)
+        ha_entity_category: str | None = raw_attrs.pop("_ha_entity_category", None)
+        ha_device_class: str | None = raw_attrs.pop("_ha_device_class", None)
+        ha_unit_of_measurement: str | None = raw_attrs.pop(
+            "_ha_unit_of_measurement", None
+        )
 
         # ------------------------------------------------------------------
         # Step 1 — Register unique_id in the entity registry FIRST so that
@@ -180,6 +186,16 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
                         platform_name = entry.domain
 
                 if platform_name:
+                    # Convert entity_category string to EntityCategory enum
+                    from homeassistant.const import EntityCategory
+
+                    ec: EntityCategory | None = None
+                    if ha_entity_category:
+                        try:
+                            ec = EntityCategory(ha_entity_category)
+                        except ValueError:
+                            pass
+
                     existing = entity_registry.async_get_entity_id(
                         domain, platform_name, ha_unique_id
                     )
@@ -196,6 +212,10 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
                             else None,
                             original_name=ha_friendly_name,
                             has_entity_name=True,
+                            translation_key=ha_translation_key or None,
+                            unit_of_measurement=ha_unit_of_measurement or None,
+                            entity_category=ec,
+                            original_device_class=ha_device_class or None,
                         )
                         _LOGGER.debug(
                             "gRPC SetState: registered unique_id=%s for %s (platform=%s)",
@@ -211,7 +231,7 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
                                 er_entry.entity_id,
                             )
                             entity_id = er_entry.entity_id
-                    # Already registered — use the registry entity_id
+                    # Already registered — use the registry entity_id as canonical
                     elif existing != entity_id:
                         _LOGGER.debug(
                             "gRPC SetState: remapping entity_id %s → %s (existing registry entry)",

@@ -186,6 +186,31 @@ def _apply_global_patches() -> None:
 
     _storage_module.Store = _MockStore  # type: ignore[assignment]
 
+    # ------------------------------------------------------------------
+    # 3. entity_platform.async_get_current_platform → mock platform
+    #    Integrations like camera and weather call this to register
+    #    entity-level services. In the worker there is no real platform
+    #    context, so we return a no-op mock instead of raising RuntimeError.
+    # ------------------------------------------------------------------
+    import homeassistant.helpers.entity_platform as _ep_module
+
+    class _MockEntityPlatform:
+        """No-op entity platform for the remote worker."""
+
+        platform_name = ""
+        domain = ""
+
+        def async_register_entity_service(
+            self, name: Any, schema: Any = None, func: Any = None, **kwargs: Any
+        ) -> None:
+            _LOGGER.debug(
+                "(proxy) entity_platform.async_register_entity_service: %s (no-op)",
+                name,
+            )
+
+    _mock_platform = _MockEntityPlatform()
+    _ep_module.async_get_current_platform = lambda: _mock_platform  # type: ignore[assignment]
+
     _LOGGER.debug("(proxy) Global patches applied.")
 
 
@@ -861,6 +886,64 @@ class _MockConfigEntries:
                                 except Exception:  # noqa: BLE001
                                     pass
                             attrs["_ha_device_info"] = json.dumps(di_serialisable)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                    # ----------------------------------------------------------
+                    # Phase 5b — translation_key, entity_category, device_class,
+                    # unit_of_measurement
+                    # ----------------------------------------------------------
+
+                    # Translation key
+                    try:
+                        _desc5 = getattr(entity, "entity_description", None)
+                        _tk = (
+                            getattr(_desc5, "translation_key", None) if _desc5 else None
+                        )
+                        if not _tk:
+                            _tk = getattr(entity, "translation_key", None)
+                        if _tk:
+                            attrs["_ha_translation_key"] = str(_tk)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                    # Entity category
+                    try:
+                        _ec = getattr(entity, "entity_category", None)
+                        if _ec is not None:
+                            attrs["_ha_entity_category"] = (
+                                str(_ec.value) if hasattr(_ec, "value") else str(_ec)
+                            )
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                    # Device class
+                    try:
+                        _desc5 = getattr(entity, "entity_description", None)
+                        _dc = getattr(entity, "device_class", None)
+                        if _dc is None and _desc5 is not None:
+                            _dc = getattr(_desc5, "device_class", None)
+                        if _dc is not None:
+                            attrs["_ha_device_class"] = (
+                                str(_dc.value) if hasattr(_dc, "value") else str(_dc)
+                            )
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                    # Unit of measurement
+                    try:
+                        _desc5 = getattr(entity, "entity_description", None)
+                        _uom = None
+                        if _desc5:
+                            _uom = getattr(
+                                _desc5, "native_unit_of_measurement", None
+                            ) or getattr(_desc5, "unit_of_measurement", None)
+                        if not _uom:
+                            _uom = getattr(
+                                entity, "_attr_native_unit_of_measurement", None
+                            ) or getattr(entity, "_attr_unit_of_measurement", None)
+                        if _uom:
+                            attrs["_ha_unit_of_measurement"] = str(_uom)
                     except Exception:  # noqa: BLE001
                         pass
 
