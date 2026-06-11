@@ -1,5 +1,7 @@
 ignore: |
   tests/fixtures/core/config/yaml_errors/
+  horizontal_scaling/k8s-rbac.yaml
+  horizontal_scaling/k8s-worker.yaml.example
 rules:
   braces:
     level: error
