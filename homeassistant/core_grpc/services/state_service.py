@@ -553,6 +553,32 @@ class CoreServiceServicer(core_pb2_grpc.CoreServiceServicer):
             ),
         )
 
+    async def GetTranslations(self, request, context):
+        """Return translations for a given language, category and integration."""
+        from homeassistant.helpers import translation  # noqa: PLC0415
+
+        language = request.language or self.hass.config.language
+        category = request.category or "entity"
+        integration = request.integration
+
+        if not integration:
+            return core_pb2.GetTranslationsResponse(translations={})
+
+        try:
+            result = await translation.async_get_translations(
+                self.hass,
+                language,
+                category,
+                {integration},
+            )
+            # result is a flat dict: {"component.X.entity.sensor.temp.name": "Temperature", ...}
+            return core_pb2.GetTranslationsResponse(
+                translations={k: str(v) for k, v in result.items()}
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("GetTranslations failed for %s: %s", integration, err)
+            return core_pb2.GetTranslationsResponse(translations={})
+
     async def RegisterWorker(self, request, context):
         """Register a remote worker and store its gRPC client in hass.data."""
         from homeassistant.core_grpc.worker_client import WorkerClient  # noqa: PLC0415

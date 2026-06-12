@@ -69,6 +69,11 @@ class CoreServiceStub(object):
                 request_serializer=core__pb2.GetConfigRequest.SerializeToString,
                 response_deserializer=core__pb2.GetConfigResponse.FromString,
                 _registered_method=True)
+        self.GetTranslations = channel.unary_unary(
+                '/homeassistant.core.CoreService/GetTranslations',
+                request_serializer=core__pb2.GetTranslationsRequest.SerializeToString,
+                response_deserializer=core__pb2.GetTranslationsResponse.FromString,
+                _registered_method=True)
 
 
 class CoreServiceServicer(object):
@@ -116,6 +121,12 @@ class CoreServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetTranslations(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CoreServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -153,6 +164,11 @@ def add_CoreServiceServicer_to_server(servicer, server):
                     servicer.GetConfig,
                     request_deserializer=core__pb2.GetConfigRequest.FromString,
                     response_serializer=core__pb2.GetConfigResponse.SerializeToString,
+            ),
+            'GetTranslations': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTranslations,
+                    request_deserializer=core__pb2.GetTranslationsRequest.FromString,
+                    response_serializer=core__pb2.GetTranslationsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -344,6 +360,33 @@ class CoreService(object):
             '/homeassistant.core.CoreService/GetConfig',
             core__pb2.GetConfigRequest.SerializeToString,
             core__pb2.GetConfigResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTranslations(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/homeassistant.core.CoreService/GetTranslations',
+            core__pb2.GetTranslationsRequest.SerializeToString,
+            core__pb2.GetTranslationsResponse.FromString,
             options,
             channel_credentials,
             insecure,

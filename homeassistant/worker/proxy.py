@@ -714,8 +714,11 @@ class _MockConfigEntries:
                             entity.entity_id,
                         )
 
-                # Initial state push
-                _push_state(hass, entity, config_entry_id)
+                # Initial state push (async — schedule as task so the sync
+                # async_add_entities callback can return immediately)
+                _push_task = asyncio.ensure_future(  # noqa: RUF006
+                    _push_state(hass, entity, config_entry_id)
+                )
 
                 # Register turn_on/turn_off as service handlers if the entity supports them.
                 # We call hass.services.async_register so that ServicesProxy notifies
@@ -747,7 +750,9 @@ class _MockConfigEntries:
 
                     def _make_listener(e: Any, eid: str) -> Any:
                         def _on_update(*_args: Any) -> None:
-                            _push_state(hass, e, eid)
+                            asyncio.ensure_future(  # noqa: RUF006
+                                _push_state(hass, e, eid)
+                            )
 
                         return _on_update
 
@@ -757,7 +762,9 @@ class _MockConfigEntries:
                     # Store the unsubscribe function on the entity for cleanup
                     entity._remote_remove_listener = remove_listener  # noqa: SLF001
 
-            def _push_state(hass: Any, entity: Any, config_entry_id: str = "") -> None:  # noqa: C901
+            async def _push_state(  # noqa: C901
+                hass: Any, entity: Any, config_entry_id: str = ""
+            ) -> None:
                 """Read entity state and push it to Core via gRPC (hass.states.async_set).
 
                 In addition to the integration-defined extra_state_attributes we
@@ -801,7 +808,7 @@ class _MockConfigEntries:
                     # ----------------------------------------------------------
                     friendly_name: str | None = None
 
-                    # Try to resolve from translation_key in strings.json
+                    # Resolve friendly_name from Core translations (via gRPC)
                     try:
                         desc = getattr(entity, "entity_description", None)
                         translation_key = (
@@ -815,35 +822,21 @@ class _MockConfigEntries:
                         )
 
                         if translation_key and platform_name_str:
-                            import json as _json  # noqa: PLC0415
-                            import pathlib as _pl  # noqa: PLC0415
-
-                            # Find strings.json for this integration
-                            components_path = (
-                                _pl.Path(__file__).parent.parent
-                                / "components"
-                                / platform_name_str
-                                / "strings.json"
+                            lang = hass.config.language or "en"
+                            translations = await hass._translation_cache.async_get(  # noqa: SLF001
+                                hass._stub,  # noqa: SLF001
+                                lang,
+                                "entity",
+                                platform_name_str,
                             )
-                            if components_path.exists():
-                                with open(components_path) as _f:
-                                    _strings = _json.load(_f)
-                                # Walk entity.<platform_domain>.<translation_key>.name
-                                # e.g. entity.sensor.ads_blocked.name
-                                entity_domain = (
-                                    entity.entity_id.split(".")[0]
-                                    if entity.entity_id
-                                    else None
-                                )
-                                if entity_domain:
-                                    _name_val = (
-                                        _strings.get("entity", {})
-                                        .get(entity_domain, {})
-                                        .get(translation_key, {})
-                                        .get("name")
-                                    )
-                                    if isinstance(_name_val, str):
-                                        friendly_name = _name_val
+                            entity_domain = (
+                                entity.entity_id.split(".")[0]
+                                if entity.entity_id
+                                else ""
+                            )
+                            full_key = f"component.{platform_name_str}.entity.{entity_domain}.{translation_key}.name"
+                            if full_key in translations:
+                                friendly_name = translations[full_key]
                     except Exception:  # noqa: BLE001
                         pass
 
@@ -984,6 +977,38 @@ class _MockConfigEntries:
 # ---------------------------------------------------------------------------
 
 
+class _TranslationCache:
+    """Cache for translations fetched from Core via gRPC."""
+
+    def __init__(self) -> None:
+        self._cache: dict[tuple[str, str, str], dict[str, str]] = {}
+
+    async def async_get(
+        self,
+        stub: Any,
+        language: str,
+        category: str,
+        integration: str,
+    ) -> dict[str, str]:
+        """Get translations, fetching from Core if not cached."""
+        key = (language, category, integration)
+        if key not in self._cache:
+            try:
+                from homeassistant.core_grpc.protos import core_pb2  # noqa: PLC0415
+
+                response = await stub.GetTranslations(
+                    core_pb2.GetTranslationsRequest(
+                        language=language,
+                        category=category,
+                        integration=integration,
+                    )
+                )
+                self._cache[key] = dict(response.translations)
+            except Exception:  # noqa: BLE001
+                self._cache[key] = {}
+        return self._cache[key]
+
+
 class HomeAssistantGrpcProxy:
     """Transparent proxy replacing the hass object in remote integrations.
 
@@ -1017,6 +1042,8 @@ class HomeAssistantGrpcProxy:
         self._dispatcher = _LocalDispatcher()
         # config_entries needs a reference to hass (self) so it can pass it to platforms
         self.config_entries = _MockConfigEntries(entry_id, self)
+        # Translation cache — populated lazily via GetTranslations gRPC calls
+        self._translation_cache = _TranslationCache()
 
     async def async_create_task(
         self, target: Coroutine, name: str | None = None

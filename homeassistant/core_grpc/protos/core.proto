@@ -10,6 +10,7 @@ service CoreService {
   rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
   rpc GetEntry(GetEntryRequest) returns (GetEntryResponse);
   rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc GetTranslations(GetTranslationsRequest) returns (GetTranslationsResponse);
 }
 
 service WorkerService {
@@ -105,6 +106,18 @@ message GetConfigResponse {
   string volume_unit = 12;
   string wind_speed_unit = 13;
   string accumulated_precipitation_unit = 14;
+}
+
+message GetTranslationsRequest {
+  string language = 1;     // e.g. "fr", "en"
+  string category = 2;     // e.g. "entity"
+  string integration = 3;  // e.g. "environment_canada"
+}
+
+message GetTranslationsResponse {
+  map<string, string> translations = 1;
+  // Key: full translation key e.g. "component.environment_canada.entity.sensor.temperature.name"
+  // Value: translated string e.g. "Température"
 }
 
 message WorkerCallServiceRequest {
