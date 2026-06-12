@@ -28,7 +28,7 @@ _GLOBAL_PATCHES_APPLIED = False
 _GLOBAL_ENTITY_REGISTRY: _MockEntityRegistry | None = None
 
 # The proxy replacement for async_get_clientsession, kept at module level so
-# that patch_integration_namespace() can re-use it after integration import.
+# that patch_integration_namespace() can reuse it after integration import.
 _DATA_PROXY_SESSION = "_remote_worker_aiohttp_session"
 
 
