@@ -317,7 +317,7 @@ async def async_start(hass):
 
 **Overall Success criteria:** Complex integrations (weather, climate, etc.) can be migrated without modification
 
-### Phase 7: Tests + Documentation
+### Phase 7: Tests + Documentation ✅ COMPLETED
 
 **Goal:** Ensure reliability and maintainability of the horizontal scaling code
 
@@ -338,7 +338,28 @@ async def async_start(hass):
 - >80% test coverage on homeassistant/worker/ and homeassistant/core_grpc/
 - Migration guide allows any developer to configure a remote worker in < 30 minutes
 
-### Phase 8: Custom Components Support (HACS + GitHub)
+### Phase 8: Integration Tests
+
+**Goal:** Validate the horizontal scaling code end-to-end using HA's native test framework
+
+**Scope:**
+- Config flow tests: full workflow (form → worker selection → entry created with runtime_mode=remote)
+- `async_step_hs_worker_selection` tests: generic step injected in all config flows
+- `config_entries.py` routing tests: remote entries are routed to the worker
+- WorkerRegistry lifecycle tests: workers start/stop with HA boot/shutdown
+- Worker reload tests: entries in SETUP_RETRY are reloaded when worker becomes ready
+- Mock gRPC workers for testing without real subprocess/docker/k8s
+
+**Duration:** ~3 days
+
+**Success criteria:**
+- Integration tests pass in HA test suite (pytest)
+- Config flow with worker selection tested end-to-end
+- Routing LOCAL/REMOTE tested in config_entries.py
+
+---
+
+### Phase 9: Custom Components (HACS + GitHub)
 
 **Goal:** Support custom integrations in workers
 
@@ -352,10 +373,39 @@ async def async_start(hass):
 
 **Duration:** ~2 days
 
-**Success criteria:** 
+**Success criteria:**
 - A HACS integration runs in a worker without being installed on the Core machine
 - Version is pinned and reproducible
 - Cache prevents re-download on worker restart
+
+---
+
+### Phase 10: Event Bus (5d) + WebSocket/Logger (5e)
+
+**Goal:** Complete the Core API surface for advanced integrations
+
+**Scope:**
+- Phase 5d: SubscribeEvents streaming RPC — worker subscribes to HA events
+- Phase 5e: WebSocket handler registration, logger streaming to Core
+
+**Duration:** ~2 days
+
+**Status:** Deferred until an integration requires it
+
+---
+
+### Phase 11: Options Flow — Worker Reassignment
+
+**Goal:** Allow changing the worker of an already-configured integration via the options flow
+
+**Scope:**
+- Options flow step in integration config flows showing worker dropdown
+- TeardownEntry on old worker, SetupEntry on new worker
+- Update entry.data with new worker_name
+
+**Duration:** ~1 day
+
+**Status:** Deferred — infrastructure (WorkerClient, SetupEntry/TeardownEntry) already in place
 
 ## Executor Comparison Matrix
 

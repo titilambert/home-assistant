@@ -1117,6 +1117,19 @@ Native Ingress/Route generation by HA (automatic hostname, TLS termination) is d
 
 ---
 
+## Remaining Phases Order
+
+**Decision:** The remaining development phases are ordered as follows, prioritizing stability (tests) before new features:
+
+1. **Phase 8: Integration Tests** — validate the existing code before adding new features
+2. **Phase 9: Custom Components (HACS/GitHub)** — extend support to custom integrations in Docker/K8s workers
+3. **Phase 10: Event Bus + WebSocket/Logger** — complete Core API for advanced integrations (deferred until needed)
+4. **Phase 11: Options Flow** — worker reassignment for existing integrations (deferred, infrastructure ready)
+
+**Rationale:** Tests first ensures the current implementation is solid before adding complexity. Custom Components is prioritized over Event Bus because it has immediate practical value for Docker/K8s deployments.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -1144,5 +1157,6 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 21. **Kubernetes manifest injection** — the Kubernetes worker accepts a user-provided standard K8s manifest (Pod + Service); HA overrides only `metadata.name`, `metadata.namespace`, `spec.containers[0].image`, and `spec.containers[0].env` (merged); all other fields (nodeSelector, tolerations, affinity, resources, volumes, labels, annotations) are preserved as-is; if no manifest is provided HA generates a minimal default; additional manifests (NetworkPolicy, PDB, etc.) are applied via `extra_manifests` without any HA interpretation
 22. **Phase 5 split into sub-phases** — Phase 5 (Complete Core API) is decomposed into 5a–5e ordered by impact: Config (~2h), Registry sync (~1d), Translations (~1d), Event Bus (~1d), WebSocket/Logger (~1d); each sub-phase is independently testable and deployable, enabling incremental value delivery without waiting for the full API surface to be complete
 23. **Kubernetes NodePort over Ingress/Route** — for external access (`kubeconfig` mode), a NodePort Service is used; Ingress and OpenShift Route generation are deferred to a future Phase 4 iteration; advanced users can expose the worker via `extra_manifests` and set `worker_address` manually
+24. **Remaining phases order** — the remaining phases are sequenced as: Phase 8 (Integration Tests) → Phase 9 (Custom Components) → Phase 10 (Event Bus + WebSocket/Logger) → Phase 11 (Options Flow); tests are prioritized first to validate the existing implementation before adding complexity; Custom Components precedes Event Bus for its immediate practical value in Docker/K8s deployments
 
 These decisions can be revisited as we learn more from implementation and production use.
