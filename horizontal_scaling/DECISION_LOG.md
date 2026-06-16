@@ -1130,6 +1130,90 @@ Native Ingress/Route generation by HA (automatic hostname, TLS termination) is d
 
 ---
 
+## Phase 9: Custom Components — Design Challenges
+
+**Context:** Phase 9 addresses running custom integrations (HACS, manual) in remote workers with full isolation.
+
+**Key insight:** The worker already executes `async_setup_entry` — the Core never touches the integration code at runtime. This means a custom component does NOT need to be installed in Core for the worker to run it.
+
+**The isolation problem:**
+- Current built-in integrations: worker imports `homeassistant.components.{domain}` — already in image ✅
+- Custom components: worker needs the code but it's not in the official image ❌
+
+**What the worker needs:**
+- The custom component code available in its filesystem
+- Resolved via: volume mount, custom image, or ComponentResolver (download from GitHub/HACS)
+
+**The config flow problem:**
+Config flows always execute in Core (not in the worker). For Core to run a custom integration's config flow, it needs the integration code. This creates a tension:
+- Option A: Install custom component in both Core AND worker → breaks isolation principle
+- Option B: Config flow runs in the worker, Core proxies UI → full isolation but very complex
+- Option C: Generic config flow in Core (no integration code needed) — user enters domain + JSON config manually, worker receives SetupEntry and has the code
+
+**Worker announces available integrations:**
+A cleaner approach: the worker scans its available custom_components/ and sends `RegisterAvailableIntegrations` to Core. Core can then:
+- Know which custom integrations are available on which worker
+- Potentially load config flows dynamically from the worker
+
+**Open questions (to be resolved in Phase 9 design):**
+1. How does the worker get the custom component code? (volume mount / ComponentResolver / custom image)
+2. How does the config flow run without the code in Core? (generic flow / worker-side flow / hybrid)
+3. Should the worker announce its available integrations to Core via a new RPC?
+4. For HACS: HACS is installed in Core — can the worker pull the same component from HACS's local cache?
+
+**Decision:** Phase 9 design is deferred pending further architectural thinking. The current implementation supports custom components via volume mounts (user responsibility) with the limitation that the config flow code must be present in Core.
+
+---
+
+## Isolation — Current State vs Goal
+
+### Current state (Phases 0–8)
+
+| Isolation type | Status | Notes |
+|----------------|--------|-------|
+| **Stability isolation** | ✅ complete | Worker crash does not affect Core |
+| **Resource isolation** | ✅ complete | CPU/memory separated |
+| **Code isolation for built-ins** | ✅ effectively complete | Code is in the official image everywhere, transparent |
+| **Code isolation for custom components** | ❌ incomplete | Config flow requires integration code in Core |
+
+### Why built-ins are fine
+
+Built-in integrations (`environment_canada`, `pi_hole`, `meteo_france`, etc.) are part of the official `homeassistant/home-assistant` image. Both Core and worker use the same image, so the code is present everywhere without any extra steps. The isolation is real and complete for these integrations.
+
+### Why custom components are not fully isolated
+
+Config flows always run in Core. For Core to run a custom integration's config flow (e.g. a HACS integration), the code must be installed in Core. This means custom components must be installed in both Core (for config flow) AND made available in the worker (for runtime). This breaks the "code isolation" principle.
+
+### Goal (Phase 9)
+
+Achieve full code isolation for custom components — the integration code should only need to be available in the worker, not in Core.
+
+## V1.0 — Config Flow Isolation
+
+**Decision:** V1.0 of the horizontal scaling architecture requires full code isolation — integration code must live exclusively in the worker, including for config flows.
+
+**Why this is the V0.x → V1.0 boundary:**
+- V0.x delivers stability and resource isolation (already valuable)
+- V1.0 delivers full code isolation (the original promise of the architecture)
+- The difference: custom component code does NOT need to be installed in Core
+
+**The config flow problem (the V1.0 blocker):**
+Config flows always execute in Core today. For Core to run a custom integration's config flow, it needs the code. Breaking this dependency is the key challenge.
+
+**Three candidate approaches for V1.0:**
+
+| Approach | Description | Pros | Cons |
+|----------|-------------|------|------|
+| **B — Generic flow** | Core provides a generic "Remote Integration" flow, user enters JSON config manually | Simple to implement | Poor UX, no guided setup |
+| **C — ComponentResolver** | Worker downloads code from GitHub/HACS, Core also gets it for config flow | Familiar UX | Code still travels to Core |
+| **D — Declarative flow** | Worker sends config flow manifest (JSON schema) to Core via RegisterAvailableIntegrations RPC. Core renders UI from manifest. | Full isolation, good UX | Complex to implement |
+
+**Recommended path to V1.0:** Approach D (Declarative config flow) — the worker announces its available integrations and their config schemas. Core renders the UI without needing Python code.
+
+**WebAssembly note:** WASM for Python is not yet mature (2026) but would elegantly solve this problem in the future. Tracked as a future extension.
+
+---
+
 ## Summary
 
 These decisions form the foundation of the Runtime Pluggable architecture:
@@ -1158,5 +1242,8 @@ These decisions form the foundation of the Runtime Pluggable architecture:
 22. **Phase 5 split into sub-phases** — Phase 5 (Complete Core API) is decomposed into 5a–5e ordered by impact: Config (~2h), Registry sync (~1d), Translations (~1d), Event Bus (~1d), WebSocket/Logger (~1d); each sub-phase is independently testable and deployable, enabling incremental value delivery without waiting for the full API surface to be complete
 23. **Kubernetes NodePort over Ingress/Route** — for external access (`kubeconfig` mode), a NodePort Service is used; Ingress and OpenShift Route generation are deferred to a future Phase 4 iteration; advanced users can expose the worker via `extra_manifests` and set `worker_address` manually
 24. **Remaining phases order** — the remaining phases are sequenced as: Phase 8 (Integration Tests) → Phase 9 (Custom Components) → Phase 10 (Event Bus + WebSocket/Logger) → Phase 11 (Options Flow); tests are prioritized first to validate the existing implementation before adding complexity; Custom Components precedes Event Bus for its immediate practical value in Docker/K8s deployments
+25. **Isolation scope** — stability and resource isolation are complete as of Phase 3 (DockerExecutor); code isolation is complete for built-in integrations (same image used everywhere) but incomplete for custom components (config flow requires code in Core); Phase 9 closes this gap
+26. **V0.x vs V1.0 versioning boundary** — V0.x (Phases 0–8) delivers stability and resource isolation, which is already production-valuable; V1.0 is defined as full code isolation where custom component code lives exclusively in the worker and is never required in Core; the V1.0 milestone requires solving the config flow execution problem (Phase 9)
+27. **Recommended path to V1.0: Approach D (Declarative config flow)** — the worker declares its config flow as a JSON schema and sends it to Core via `RegisterAvailableIntegrations` RPC; Core renders the config flow UI dynamically without any integration Python code; the worker executes the actual setup once the config is validated; Approaches B (generic flow) and C (ComponentResolver) are viable but either sacrifice UX or still bring code into Core; WASM (Python) is deferred as not yet mature (2026) but tracked as a future extension
 
 These decisions can be revisited as we learn more from implementation and production use.

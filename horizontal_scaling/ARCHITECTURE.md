@@ -359,24 +359,50 @@ async def async_start(hass):
 
 ---
 
-### Phase 9: Custom Components (HACS + GitHub)
+### Phase 9: Custom Components — Full Isolation
 
-**Goal:** Support custom integrations in workers
+**Goal:** Run custom integrations (HACS, manual) in remote workers WITHOUT requiring the integration code in Core
 
-**Scope:**
-- ComponentResolver implementation (`homeassistant/worker/resolver.py`)
-- GetEntry proto: add `source` field
-- HACS index resolver (hacs/default → GitHub URL)
-- GitHub downloader (zip download + extraction)
-- Local cache management
-- Version pinning (@tag, @commit, @branch)
+**Key challenge:** Config flows always execute in Core, creating a dependency on integration code in Core even for remote integrations.
 
-**Duration:** ~2 days
+**Proposed approaches (under design):**
 
-**Success criteria:**
-- A HACS integration runs in a worker without being installed on the Core machine
-- Version is pinned and reproducible
-- Cache prevents re-download on worker restart
+**Approach A — Worker announces available integrations**
+- Worker scans its custom_components/ at startup
+- Worker sends RegisterAvailableIntegrations([{domain, source, version}]) to Core
+- Core dynamically loads config flows from worker (complex, requires remote code execution)
+
+**Approach B — Generic config flow in Core**  
+- Core provides a generic "Remote Integration" config flow
+- User manually enters: worker, domain, JSON config
+- Worker receives SetupEntry and has the code (via volume, ComponentResolver, or custom image)
+- No integration code needed in Core
+- Limitation: no guided config flow, raw JSON config
+
+**Approach C — ComponentResolver (original design)**
+- worker/resolver.py downloads integration code from GitHub/HACS index
+- Core sends source="hacs:domain" or "github:user/repo@v1.0" in GetEntryResponse
+- Worker downloads, caches, imports the integration
+- Still requires code in Core for config flow
+
+**Approach D — Declarative config flow (most elegant)**
+- Integration declares its config flow as JSON/YAML schema (like strings.json)
+- Worker sends this manifest to Core via RegisterAvailableIntegrations RPC
+- Core generates the config flow UI dynamically from the manifest — no Python code needed
+- Worker executes the actual setup once config is validated
+- This is the direction that would unlock V1.0
+
+**Future Extension — WebAssembly Runtime**
+- Compile integrations to WASM for ultra-lightweight sandboxing
+- WASM could run in both Core (config flow) and worker (runtime) with native isolation
+- Technology not yet mature for Python (2026) — tracked as future direction
+- Would completely solve the isolation problem
+
+**V1.0 blocker:** Config flow isolation (Approaches B, C, or D above)
+
+**Current status:** Deferred. Volume mounts work for same-machine deployments. Full isolation design TBD.
+
+**Duration:** ~3 days (once design is finalized)
 
 ---
 
@@ -532,6 +558,58 @@ The Core is the source of truth — it knows where the integration comes from (i
 - ✅ Full support
 - ⚠️ Possible with limitations
 - ❌ Not supported (must stay LOCAL)
+
+## Versioning — V0.x vs V1.0
+
+### Current state: V0.x
+
+The current implementation (Phases 0-8) delivers:
+- ✅ Stability isolation: worker crash does not affect Core
+- ✅ Resource isolation: CPU/memory separated
+- ✅ Full isolation for built-in integrations (code is in the official image everywhere)
+- ❌ Partial isolation for custom components: code must be in Core for config flow
+
+### V1.0 goal: Full Code Isolation
+
+V1.0 is reached when **integration code lives exclusively in the worker** — Core never needs the integration code, including for config flows.
+
+This requires solving the config flow problem (see Phase 9).
+
+### V1.0 milestone criteria
+
+- [ ] Config flow executes in the worker (not in Core)
+- [ ] Custom component code is NOT required in Core
+- [ ] Worker announces its available integrations to Core
+- [ ] Full end-to-end isolation: a buggy custom integration cannot affect Core in any way
+
+## Current Isolation Status
+
+### What IS isolated today ✅
+
+| Aspect | Description |
+|--------|-------------|
+| **Stability** | Integration crash in worker does not affect Core HA |
+| **Resources** | CPU/memory usage of integrations is separate from Core |
+| **Python dependencies** | Integration-specific libraries run in worker process/container |
+| **Polling loops** | Integration update cycles do not block the Core event loop |
+| **Network calls** | External API calls happen in worker, not in Core |
+
+### What is NOT isolated today ❌
+
+| Aspect | Description | Affected |
+|--------|-------------|----------|
+| **Config flow code** | Config flows always execute in Core — integration code must be present in Core | Custom components only |
+| **Built-in integrations** | Code is in the official HA image everywhere — transparent | N/A (not a real limitation) |
+| **Custom components** | Code must be installed in Core for config flow, AND available in worker for runtime | HACS, manual installs |
+
+### Summary
+
+For **built-in integrations** (the vast majority): isolation is effectively complete.  
+The integration code is already in the official HA image on both Core and worker — no extra steps needed.
+
+For **custom integrations** (HACS, manual): partial isolation only.  
+The code must exist in Core for the config flow, breaking full code isolation.  
+Full isolation for custom components is the goal of Phase 9.
 
 ## Benefits
 
