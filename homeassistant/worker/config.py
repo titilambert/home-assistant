@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import pathlib
+import shutil
 from typing import TYPE_CHECKING
 
 import voluptuous as vol
@@ -29,6 +31,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "workers"
+CONF_PANEL_URL = "workers_panel_url"
+DEFAULT_PANEL_URL = "config/workers"
 
 CONF_WORKER_NAME = "name"
 CONF_WORKER_TYPE = "type"
@@ -136,6 +140,7 @@ CONFIG_SCHEMA = vol.Schema(
             cv.ensure_list,
             [_validate_worker],
         ),
+        vol.Optional(CONF_PANEL_URL, default=DEFAULT_PANEL_URL): cv.string,
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -146,28 +151,75 @@ async def async_setup_workers(hass: HomeAssistant, config: dict) -> None:
     from .registry import WorkerRegistry  # noqa: PLC0415
 
     workers_conf: list[dict] = config.get(DOMAIN, [])
+    panel_url: str = config.get(CONF_PANEL_URL, DEFAULT_PANEL_URL)
+    hass.data["worker_panel_url"] = panel_url
 
-    if not workers_conf:
-        return
+    if workers_conf:
+        names = [w[CONF_WORKER_NAME] for w in workers_conf]
+        if len(names) != len(set(names)):
+            _LOGGER.error("Duplicate worker names in workers configuration")
+            return
 
-    names = [w[CONF_WORKER_NAME] for w in workers_conf]
-    if len(names) != len(set(names)):
-        _LOGGER.error("Duplicate worker names in workers configuration")
-        return
+        registry = WorkerRegistry(hass, workers_conf)
+        hass.data[DATA_WORKER_REGISTRY] = registry
+        await registry.async_start()
 
-    registry = WorkerRegistry(hass, workers_conf)
-    hass.data[DATA_WORKER_REGISTRY] = registry
-    await registry.async_start()
+        async def _stop_workers(_event=None) -> None:
+            await registry.async_stop()
 
-    async def _stop_workers(_event=None) -> None:
-        await registry.async_stop()
+        hass.bus.async_listen_once("homeassistant_stop", _stop_workers)
 
-    hass.bus.async_listen_once("homeassistant_stop", _stop_workers)
+        _LOGGER.info(
+            "Workers: %d worker(s) declared (%s)",
+            len(workers_conf),
+            ", ".join(
+                f"{w[CONF_WORKER_NAME]} ({w[CONF_WORKER_TYPE]})" for w in workers_conf
+            ),
+        )
 
-    _LOGGER.info(
-        "Workers: %d worker(s) declared (%s)",
-        len(workers_conf),
-        ", ".join(
-            f"{w[CONF_WORKER_NAME]} ({w[CONF_WORKER_TYPE]})" for w in workers_conf
-        ),
+    # Copy panel JS to www/ so it's served at /local/workers-panel.js
+    _www_dir = pathlib.Path(hass.config.config_dir) / "www"
+    _www_dir.mkdir(exist_ok=True)
+    _panel_src = pathlib.Path(__file__).parent / "www" / "workers-panel.js"
+    _panel_dst = _www_dir / "workers-panel.js"
+    if _panel_src.exists():
+        shutil.copy2(_panel_src, _panel_dst)
+    else:
+        _LOGGER.warning("Workers panel JS source not found at %s", _panel_src)
+
+    # Register the custom panel
+    from homeassistant.components.panel_custom import (  # noqa: PLC0415
+        async_register_panel,
     )
+
+    await async_register_panel(
+        hass,
+        frontend_url_path=panel_url,
+        webcomponent_name="workers-panel",
+        sidebar_title="Workers",
+        sidebar_icon="mdi:server-network",
+        js_url="/local/workers-panel.js",
+        require_admin=True,
+    )
+
+    # Register the WebSocket API command
+    from homeassistant.components.websocket_api import (  # noqa: PLC0415
+        ActiveConnection,
+        async_register_command,
+        async_response,
+        websocket_command,
+    )
+
+    @websocket_command({"type": "workers/list"})
+    @async_response
+    async def websocket_list_workers(
+        hass: HomeAssistant, connection: ActiveConnection, msg: dict
+    ) -> None:
+        """Return list of declared workers."""
+        registry = hass.data.get(DATA_WORKER_REGISTRY)
+        workers: list[dict] = []
+        if registry is not None:
+            workers.extend(worker.to_dict() for worker in registry.all_workers())
+        connection.send_result(msg["id"], {"workers": workers})
+
+    async_register_command(hass, websocket_list_workers)

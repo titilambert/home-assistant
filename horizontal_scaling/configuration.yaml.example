@@ -3,6 +3,10 @@
 # Add this to your configuration.yaml to declare workers.
 # See horizontal_scaling/WORKERS.md for full documentation.
 
+# Optional: URL path for the Workers dashboard panel (default: config/workers)
+# Accessible in the HA sidebar at the given path once workers are declared.
+# workers_panel_url: config/workers
+
 workers:
 
     # -------------------------------------------------------------------------

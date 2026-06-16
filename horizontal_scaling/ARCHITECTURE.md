@@ -282,6 +282,8 @@ async def async_start(hass):
 
 #### Phase 5d: Event Bus
 
+**Status:** Deferred — no blocking issues observed in current integrations. The most critical event (`homeassistant_stop`) is already handled via SIGTERM on the worker process. Will be implemented when an integration requires it.
+
 **Goal:** Worker can subscribe to HA events (homeassistant_start, state_changed, etc.)
 
 **Scope:**
@@ -296,6 +298,8 @@ async def async_start(hass):
 ---
 
 #### Phase 5e: WebSocket & Logger (optional)
+
+**Status:** Deferred — no blocking issues observed. Camera image display is a known limitation. Logger streaming will be implemented when needed.
 
 **Goal:** Advanced integrations support
 
