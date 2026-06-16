@@ -10,7 +10,6 @@ import pytest
 from homeassistant.core_grpc.protos import core_pb2
 from homeassistant.core_grpc.services.state_service import (
     DATA_ENTITY_ENTRY,
-    DATA_WORKER_CLIENTS,
     CoreServiceServicer,
 )
 
@@ -24,7 +23,7 @@ def hass_mock() -> MagicMock:
     hass.states.get = MagicMock(return_value=None)
     hass.services.async_register = MagicMock()
     hass.services.has_service = MagicMock(return_value=False)
-    hass.services._services = {}  # noqa: SLF001
+    hass.services._services = {}
     hass.bus.async_listen = MagicMock(return_value=lambda: None)
     hass.config_entries.async_get_entry = MagicMock(return_value=None)
     return hass

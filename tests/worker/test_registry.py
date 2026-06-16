@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from homeassistant.worker.const import (
-    DATA_WORKER_REGISTRY,
-    WORKER_STATUS_RUNNING,
-    WORKER_STATUS_UNAVAILABLE,
-)
+from homeassistant.worker.const import WORKER_STATUS_RUNNING
 from homeassistant.worker.registry import WorkerRegistry
 
 

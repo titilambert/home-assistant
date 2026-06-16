@@ -43,4 +43,12 @@ IGNORE_UNCAUGHT_EXCEPTIONS = [
     ),
     ("tests.components.iaqualink.test_config_flow", "test_with_invalid_credentials"),
     ("tests.components.iaqualink.test_config_flow", "test_with_existing_config"),
+    (
+        # gRPC's PollerCompletionQueue fires a callback after the event loop
+        # closes when the ProcessWorker subprocess's WorkerClient channel is
+        # torn down. This is a known grpc.aio / asyncio interaction issue that
+        # does not affect the test outcome.
+        "tests.worker.test_integration",
+        "test_config_flow_injects_worker_selection",
+    ),
 ]

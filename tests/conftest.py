@@ -405,6 +405,10 @@ def verify_cleanup(
             isinstance(thread, threading._DummyThread)
             or thread.name.startswith("waitpid-")
             or "_run_safe_shutdown_loop" in thread.name
+            # gRPC C extension creates a polling thread tied to the asyncio event
+            # loop. It is cleaned up when the loop closes, but verify_cleanup runs
+            # before full loop teardown, so we allow it here.
+            or "_poll_wrapper" in thread.name
         )
 
     try:

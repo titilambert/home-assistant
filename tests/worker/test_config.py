@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import voluptuous as vol
 
-from homeassistant.worker.config import CONF_PANEL_URL, CONFIG_SCHEMA
+from homeassistant.worker.config import CONFIG_SCHEMA
 
 
 def test_schema_accepts_empty():

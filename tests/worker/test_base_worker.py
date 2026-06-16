@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from homeassistant.worker.const import WORKER_STATUS_RUNNING, WORKER_STATUS_UNAVAILABLE
 from homeassistant.worker.workers.remote import RemoteWorker
 
 

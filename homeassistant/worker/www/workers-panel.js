@@ -28,7 +28,7 @@ class WorkersPanel extends HTMLElement {
         running: "#4caf50",
         unavailable: "#f44336",
         not_implemented: "#9e9e9e",
-      }[s] || "#9e9e9e");
+      })[s] || "#9e9e9e";
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -114,7 +114,7 @@ class WorkersPanel extends HTMLElement {
                 ${w.active_integrations} / ${w.max_integrations != null ? w.max_integrations : "\u221e"}
               </td>
             </tr>
-          `
+          `,
                   )
                   .join("")
           }
