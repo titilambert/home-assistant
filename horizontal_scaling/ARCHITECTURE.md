@@ -317,20 +317,26 @@ async def async_start(hass):
 
 **Overall Success criteria:** Complex integrations (weather, climate, etc.) can be migrated without modification
 
-### Phase 7: Generalization + Tooling
+### Phase 7: Tests + Documentation
 
-**Goal:** Make migration easy for all integrations
+**Goal:** Ensure reliability and maintainability of the horizontal scaling code
 
 **Scope:**
-- Base classes for easy migration
-- CLI tool to scaffold remote-ready integration
-- Migration guide documentation
-- Automated tests framework
-- Observability (metrics, tracing)
+- Unit tests for WorkerRegistry (start/stop, capacity, auto-reload)
+- Unit tests for workers (ProcessWorker, DockerWorker, KubernetesWorker) with mocks
+- Unit tests for HomeAssistantGrpcProxy (_push_state, async_fetch_config, async_fetch_translations)
+- Unit tests for gRPC RPCs (SetState, GetConfig, GetTranslations, SetupEntry, TeardownEntry)
+- Integration tests for config_entries.py LOCAL/REMOTE routing
+- Integration tests for config flow worker selection (async_step_hs_worker_selection)
+- Migration guide: README explaining zero-code migration and workers: configuration
+
+**Note:** No CLI tool or metrics — zero code change in integrations makes migration tooling unnecessary.
 
 **Duration:** ~1 week
 
-**Success criteria:** Any developer can migrate an integration in < 1 day
+**Success criteria:**
+- >80% test coverage on homeassistant/worker/ and homeassistant/core_grpc/
+- Migration guide allows any developer to configure a remote worker in < 30 minutes
 
 ### Phase 8: Custom Components Support (HACS + GitHub)
 
